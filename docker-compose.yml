@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: textbook_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: textbook_sharing
+      MYSQL_USER: textbook_user
+      MYSQL_PASSWORD: textbook_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: textbook_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: textbook_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+    environment:
+      - DEBUG=1
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=textbook_sharing
+      - DB_USER=textbook_user
+      - DB_PASSWORD=textbook_pass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=django-insecure-textbook-sharing-secret-key-change-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: /app/entrypoint.sh
+
+  celery:
+    build: ./backend
+    container_name: textbook_celery
+    restart: always
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=1
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=textbook_sharing
+      - DB_USER=textbook_user
+      - DB_PASSWORD=textbook_pass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=django-insecure-textbook-sharing-secret-key-change-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A config worker -l info -B
+
+  frontend:
+    build: ./frontend
+    container_name: textbook_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  backend_media:
+  backend_static:

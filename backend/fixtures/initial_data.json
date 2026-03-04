@@ -1,0 +1,45 @@
+[
+  {"model": "textbooks.category", "pk": 1, "fields": {"name": "理工科", "parent": null, "level": 1, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 2, "fields": {"name": "文科", "parent": null, "level": 1, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 3, "fields": {"name": "商科", "parent": null, "level": 1, "sort_order": 3, "is_active": true}},
+  {"model": "textbooks.category", "pk": 4, "fields": {"name": "艺术体育", "parent": null, "level": 1, "sort_order": 4, "is_active": true}},
+  {"model": "textbooks.category", "pk": 5, "fields": {"name": "医学", "parent": null, "level": 1, "sort_order": 5, "is_active": true}},
+
+  {"model": "textbooks.category", "pk": 10, "fields": {"name": "计算机科学", "parent": 1, "level": 2, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 11, "fields": {"name": "数学", "parent": 1, "level": 2, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 12, "fields": {"name": "物理", "parent": 1, "level": 2, "sort_order": 3, "is_active": true}},
+  {"model": "textbooks.category", "pk": 13, "fields": {"name": "化学", "parent": 1, "level": 2, "sort_order": 4, "is_active": true}},
+  {"model": "textbooks.category", "pk": 14, "fields": {"name": "电子信息", "parent": 1, "level": 2, "sort_order": 5, "is_active": true}},
+  {"model": "textbooks.category", "pk": 15, "fields": {"name": "机械工程", "parent": 1, "level": 2, "sort_order": 6, "is_active": true}},
+  {"model": "textbooks.category", "pk": 16, "fields": {"name": "土木工程", "parent": 1, "level": 2, "sort_order": 7, "is_active": true}},
+
+  {"model": "textbooks.category", "pk": 20, "fields": {"name": "中文", "parent": 2, "level": 2, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 21, "fields": {"name": "英语", "parent": 2, "level": 2, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 22, "fields": {"name": "历史", "parent": 2, "level": 2, "sort_order": 3, "is_active": true}},
+  {"model": "textbooks.category", "pk": 23, "fields": {"name": "哲学", "parent": 2, "level": 2, "sort_order": 4, "is_active": true}},
+  {"model": "textbooks.category", "pk": 24, "fields": {"name": "法学", "parent": 2, "level": 2, "sort_order": 5, "is_active": true}},
+
+  {"model": "textbooks.category", "pk": 30, "fields": {"name": "经济学", "parent": 3, "level": 2, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 31, "fields": {"name": "管理学", "parent": 3, "level": 2, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 32, "fields": {"name": "会计学", "parent": 3, "level": 2, "sort_order": 3, "is_active": true}},
+  {"model": "textbooks.category", "pk": 33, "fields": {"name": "金融学", "parent": 3, "level": 2, "sort_order": 4, "is_active": true}},
+
+  {"model": "textbooks.category", "pk": 100, "fields": {"name": "数据结构", "parent": 10, "level": 3, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 101, "fields": {"name": "操作系统", "parent": 10, "level": 3, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 102, "fields": {"name": "计算机网络", "parent": 10, "level": 3, "sort_order": 3, "is_active": true}},
+  {"model": "textbooks.category", "pk": 103, "fields": {"name": "数据库", "parent": 10, "level": 3, "sort_order": 4, "is_active": true}},
+  {"model": "textbooks.category", "pk": 104, "fields": {"name": "编程语言", "parent": 10, "level": 3, "sort_order": 5, "is_active": true}},
+  {"model": "textbooks.category", "pk": 105, "fields": {"name": "人工智能", "parent": 10, "level": 3, "sort_order": 6, "is_active": true}},
+  {"model": "textbooks.category", "pk": 110, "fields": {"name": "高等数学", "parent": 11, "level": 3, "sort_order": 1, "is_active": true}},
+  {"model": "textbooks.category", "pk": 111, "fields": {"name": "线性代数", "parent": 11, "level": 3, "sort_order": 2, "is_active": true}},
+  {"model": "textbooks.category", "pk": 112, "fields": {"name": "概率统计", "parent": 11, "level": 3, "sort_order": 3, "is_active": true}},
+
+  {"model": "reviews.sensitiveword", "pk": 1, "fields": {"word": "反动", "category": "political", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 2, "fields": {"word": "颠覆", "category": "political", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 3, "fields": {"word": "暴力革命", "category": "violence", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 4, "fields": {"word": "邪教", "category": "political", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 5, "fields": {"word": "赌博", "category": "illegal", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 6, "fields": {"word": "毒品", "category": "illegal", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 7, "fields": {"word": "传销", "category": "illegal", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}},
+  {"model": "reviews.sensitiveword", "pk": 8, "fields": {"word": "非法集资", "category": "illegal", "is_active": true, "created_at": "2025-01-01T00:00:00Z"}}
+]

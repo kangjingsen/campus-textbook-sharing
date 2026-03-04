@@ -1,0 +1,145 @@
+from django.db import models
+from django.conf import settings
+
+
+class Category(models.Model):
+    """教材分类（支持多级分类）"""
+    name = models.CharField('分类名称', max_length=100)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
+                               related_name='children', verbose_name='父分类')
+    level = models.IntegerField('层级', default=1)  # 1=学科, 2=课程, 3=教材类型
+    sort_order = models.IntegerField('排序', default=0)
+    is_active = models.BooleanField('是否启用', default=True)
+
+    class Meta:
+        db_table = 'categories'
+        verbose_name = '分类'
+        verbose_name_plural = verbose_name
+        ordering = ['sort_order', 'id']
+
+    def __str__(self):
+        return self.name
+
+
+class Textbook(models.Model):
+    """教材模型"""
+    TRANSACTION_TYPE_CHOICES = (
+        ('sell', '出售'),
+        ('rent', '租赁'),
+        ('free', '免费赠送'),
+    )
+
+    CONDITION_CHOICES = (
+        (5, '全新'),
+        (4, '九成新'),
+        (3, '七成新'),
+        (2, '五成新'),
+        (1, '较旧'),
+    )
+
+    STATUS_CHOICES = (
+        ('pending_review', '待审核'),
+        ('approved', '已通过'),
+        ('rejected', '已驳回'),
+        ('sold', '已售出'),
+        ('rented', '已租出'),
+        ('completed', '已完成'),
+        ('offline', '已下架'),
+    )
+
+    title = models.CharField('书名', max_length=200)
+    author = models.CharField('作者', max_length=200)
+    isbn = models.CharField('ISBN', max_length=20, blank=True, default='')
+    publisher = models.CharField('出版社', max_length=200, blank=True, default='')
+    edition = models.CharField('版本/版次', max_length=50, blank=True, default='')
+    condition = models.IntegerField('新旧程度', choices=CONDITION_CHOICES, default=4)
+    description = models.TextField('描述', blank=True, default='')
+    price = models.DecimalField('价格', max_digits=10, decimal_places=2, default=0)
+    original_price = models.DecimalField('原价', max_digits=10, decimal_places=2, null=True, blank=True)
+    transaction_type = models.CharField('交易类型', max_length=10, choices=TRANSACTION_TYPE_CHOICES, default='sell')
+    rent_duration = models.IntegerField('租赁天数', null=True, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='textbooks', verbose_name='分类')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                              related_name='textbooks', verbose_name='发布者')
+    status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='pending_review')
+    cover_image = models.ImageField('封面图', upload_to='covers/', blank=True, null=True)
+    view_count = models.IntegerField('浏览次数', default=0)
+    created_at = models.DateTimeField('发布时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'textbooks'
+        verbose_name = '教材'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} - {self.author}'
+
+
+class TextbookVote(models.Model):
+    """教材点赞/点踩"""
+    VOTE_CHOICES = (
+        (1, '点赞'),
+        (-1, '点踩'),
+    )
+    textbook = models.ForeignKey(Textbook, on_delete=models.CASCADE, related_name='votes', verbose_name='教材')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='votes', verbose_name='用户')
+    vote = models.SmallIntegerField('投票', choices=VOTE_CHOICES)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'textbook_votes'
+        verbose_name = '教材投票'
+        verbose_name_plural = verbose_name
+        unique_together = ('textbook', 'user')
+
+
+class TextbookComment(models.Model):
+    """教材评论"""
+    textbook = models.ForeignKey(Textbook, on_delete=models.CASCADE, related_name='comments', verbose_name='教材')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comments', verbose_name='评论者')
+    content = models.TextField('评论内容', max_length=500)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies', verbose_name='父评论')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'textbook_comments'
+        verbose_name = '教材评论'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username}: {self.content[:30]}'
+
+
+class SharedResource(models.Model):
+    """在线资料共享"""
+    RESOURCE_TYPE_CHOICES = (
+        ('pdf', 'PDF文档'),
+        ('doc', 'Word文档'),
+        ('ppt', 'PPT课件'),
+        ('other', '其他'),
+    )
+
+    title = models.CharField('标题', max_length=200)
+    description = models.TextField('描述', blank=True, default='')
+    file = models.FileField('文件', upload_to='resources/')
+    file_size = models.IntegerField('文件大小(字节)', default=0)
+    resource_type = models.CharField('类型', max_length=10, choices=RESOURCE_TYPE_CHOICES, default='pdf')
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='resources', verbose_name='分类')
+    uploader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                 related_name='resources', verbose_name='上传者')
+    download_count = models.IntegerField('下载次数', default=0)
+    created_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'shared_resources'
+        verbose_name = '共享资料'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
