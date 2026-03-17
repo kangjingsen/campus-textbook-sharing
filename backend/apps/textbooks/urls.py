@@ -26,4 +26,11 @@ urlpatterns = [
     path('resources/', views.SharedResourceListView.as_view(), name='resource_list'),
     path('resources/<int:pk>/', views.SharedResourceDetailView.as_view(), name='resource_detail'),
     path('resources/<int:pk>/download/', views.SharedResourceDownloadView.as_view(), name='resource_download'),
+    path('resources/orders/create/', views.ResourceOrderCreateView.as_view(), name='resource_order_create'),
+    path('resources/orders/', views.ResourceOrderListView.as_view(), name='resource_order_list'),
+    path('resources/orders/<int:pk>/', views.ResourceOrderDetailView.as_view(), name='resource_order_detail'),
+    path('resources/orders/<int:pk>/confirm/', views.ResourceOrderConfirmView.as_view(), name='resource_order_confirm'),
+    path('resources/orders/<int:pk>/complete/', views.ResourceOrderCompleteView.as_view(), name='resource_order_complete'),
+    path('resources/orders/<int:pk>/seller-complete/', views.ResourceOrderSellerCompleteView.as_view(), name='resource_order_seller_complete'),
+    path('resources/orders/<int:pk>/cancel/', views.ResourceOrderCancelView.as_view(), name='resource_order_cancel'),
 ]

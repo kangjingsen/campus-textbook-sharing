@@ -57,3 +57,34 @@ class RecommendationCache(models.Model):
         verbose_name_plural = verbose_name
         unique_together = ['user', 'textbook']
         ordering = ['-score']
+
+
+class WishlistItem(models.Model):
+    """用户心愿单"""
+    STATUS_CHOICES = (
+        ('open', '待满足'),
+        ('matched', '已匹配'),
+        ('closed', '已关闭'),
+    )
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name='wishlist_items', verbose_name='用户')
+    title = models.CharField('期望书名', max_length=200)
+    author = models.CharField('期望作者', max_length=200, blank=True, default='')
+    isbn = models.CharField('期望ISBN', max_length=20, blank=True, default='')
+    category = models.ForeignKey('textbooks.Category', on_delete=models.SET_NULL,
+                                 null=True, blank=True, related_name='wishlist_items', verbose_name='分类')
+    note = models.TextField('备注', blank=True, default='')
+    priority = models.PositiveSmallIntegerField('优先级', default=3)
+    status = models.CharField('状态', max_length=10, choices=STATUS_CHOICES, default='open')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'wishlist_items'
+        verbose_name = '心愿单'
+        verbose_name_plural = verbose_name
+        ordering = ['-priority', '-created_at']
+
+    def __str__(self):
+        return f'{self.user.username}: {self.title}'

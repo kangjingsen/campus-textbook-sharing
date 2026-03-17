@@ -13,6 +13,30 @@
     </div>
 
     <!-- 推荐教材 -->
+    <div class="section" v-if="userStore.isLoggedIn">
+      <div class="section-header">
+        <h2>💖 我的心愿单（高优先级）</h2>
+        <router-link to="/wishlist">管理心愿单 →</router-link>
+      </div>
+      <el-row :gutter="16">
+        <el-col :xs="24" :sm="12" :md="8" v-for="wish in wishlistTop" :key="wish.id">
+          <el-card shadow="hover" class="wishlist-card">
+            <div class="wish-top">
+              <h4>{{ wish.title }}</h4>
+              <el-tag :type="statusType(wish.status)" size="small">{{ statusText(wish.status) }}</el-tag>
+            </div>
+            <p class="wish-meta">作者：{{ wish.author || '不限' }}</p>
+            <p class="wish-meta">分类：{{ wish.category_name || '未指定' }}</p>
+            <div class="wish-actions">
+              <el-rate v-model="wish.priority" disabled :max="5" />
+              <el-button size="small" type="primary" @click="handleWishSearch(wish.title)">去找书</el-button>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+      <el-empty v-if="!wishlistTop.length" description="还没有心愿，去添加一条吧" />
+    </div>
+
     <div class="section">
       <div class="section-header">
         <h2>🎯 为你推荐</h2>
@@ -78,7 +102,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
-import { getRecommendations, getPopularTextbooks } from '../api/modules'
+import { getRecommendations, getPopularTextbooks, getWishlist } from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
@@ -86,15 +110,21 @@ const userStore = useUserStore()
 const searchKeyword = ref('')
 const recommendations = ref([])
 const popular = ref([])
+const wishlistTop = ref([])
 
 const getTypeTag = (type) => ({ sell: '', rent: 'warning', free: 'success' }[type] || '')
 const getTypeLabel = (type) => ({ sell: '出售', rent: '租赁', free: '免费' }[type] || '')
+const statusText = (s) => ({ open: '待满足', matched: '已匹配', closed: '已关闭' }[s] || s)
+const statusType = (s) => ({ open: 'warning', matched: 'success', closed: 'info' }[s] || '')
 
 onMounted(async () => {
   try {
     if (userStore.isLoggedIn) {
       const res = await getRecommendations({ limit: 8 })
       recommendations.value = res.data.recommendations || []
+      const wishRes = await getWishlist({ status: 'open' })
+      const wishList = wishRes.data.results || wishRes.data || []
+      wishlistTop.value = wishList.slice(0, 3)
     }
   } catch {}
   try {
@@ -107,6 +137,11 @@ const handleSearch = () => {
   if (searchKeyword.value.trim()) {
     router.push({ path: '/textbooks', query: { q: searchKeyword.value.trim() } })
   }
+}
+
+const handleWishSearch = (title) => {
+  if (!title) return
+  router.push({ path: '/textbooks', query: { q: title } })
 }
 </script>
 
@@ -157,4 +192,9 @@ const handleSearch = () => {
 .price { color: #f56c6c; font-size: 16px; font-weight: bold; }
 .price.free { color: #67c23a; }
 .views { color: #909399; font-size: 12px; }
+.wishlist-card { margin-bottom: 16px; }
+.wish-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.wish-top h4 { margin:0; font-size: 15px; }
+.wish-meta { color:#606266; margin: 4px 0; font-size: 13px; }
+.wish-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
 </style>

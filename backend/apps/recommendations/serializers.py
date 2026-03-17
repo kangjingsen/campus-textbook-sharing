@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import BrowsingHistory, RecommendationCache
+from .models import BrowsingHistory, RecommendationCache, WishlistItem
 from apps.textbooks.serializers import TextbookListSerializer
 
 
@@ -19,3 +19,15 @@ class RecommendationSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecommendationCache
         fields = ['id', 'textbook', 'score', 'reason', 'updated_at']
+
+
+class WishlistItemSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True, default='')
+
+    class Meta:
+        model = WishlistItem
+        fields = [
+            'id', 'title', 'author', 'isbn', 'category', 'category_name',
+            'note', 'priority', 'status', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

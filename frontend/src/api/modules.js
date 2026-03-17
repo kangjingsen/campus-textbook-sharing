@@ -66,6 +66,13 @@ export const uploadResource = (data) => {
 export const getResourceDetail = (id) => api.get(`/textbooks/resources/${id}/`)
 export const deleteResource = (id) => api.delete(`/textbooks/resources/${id}/`)
 export const downloadResource = (id) => api.post(`/textbooks/resources/${id}/download/`)
+export const createResourceOrder = (data) => api.post('/textbooks/resources/orders/create/', data)
+export const getResourceOrders = (params) => api.get('/textbooks/resources/orders/', { params })
+export const getResourceOrderDetail = (id) => api.get(`/textbooks/resources/orders/${id}/`)
+export const confirmResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/confirm/`, data)
+export const completeResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/complete/`, data)
+export const sellerCompleteResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/seller-complete/`)
+export const cancelResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/cancel/`)
 
 // 分类
 export const getCategoryTree = () => api.get('/textbooks/categories/tree/')
@@ -106,6 +113,10 @@ export const deleteSensitiveWord = (id) => api.delete(`/reviews/sensitive-words/
 export const getRecommendations = (params) => api.get('/recommendations/', { params })
 export const getPopularTextbooks = () => api.get('/recommendations/popular/')
 export const getBrowsingHistory = (params) => api.get('/recommendations/history/', { params })
+export const getWishlist = (params) => api.get('/recommendations/wishlist/', { params })
+export const createWishlistItem = (data) => api.post('/recommendations/wishlist/', data)
+export const updateWishlistItem = (id, data) => api.patch(`/recommendations/wishlist/${id}/`, data)
+export const deleteWishlistItem = (id) => api.delete(`/recommendations/wishlist/${id}/`)
 
 // 统计
 export const getDashboardOverview = () => api.get('/statistics/overview/')
@@ -118,6 +129,12 @@ export const getTransactionTypes = () => api.get('/statistics/transaction-types/
 export const getTransactionTypeDist = () => api.get('/statistics/transaction-types/')
 export const getUserActivity = (params) => api.get('/statistics/user-activity/', { params })
 export const getCategoryDistribution = () => api.get('/statistics/category-distribution/')
+export const getSalesRanking = (params) => api.get('/statistics/sales-ranking/', { params })
+export const getDemandRanking = (params) => api.get('/statistics/demand-ranking/', { params })
+export const getTopSellers = (params) => api.get('/statistics/top-sellers/', { params })
+export const getPriceMetrics = (params) => api.get('/statistics/price-metrics/', { params })
+export const getWishlistDemand = () => api.get('/statistics/wishlist-demand/')
+export const getCancellationInsights = (params) => api.get('/statistics/cancellation-insights/', { params })
 
 // 审核 - 别名
 export const getSensitiveWordList = (params) => api.get('/reviews/sensitive-words/', { params })

@@ -123,11 +123,18 @@ class SharedResource(models.Model):
         ('other', '其他'),
     )
 
+    SALE_TYPE_CHOICES = (
+        ('free', '免费'),
+        ('sell', '售卖'),
+    )
+
     title = models.CharField('标题', max_length=200)
     description = models.TextField('描述', blank=True, default='')
     file = models.FileField('文件', upload_to='resources/')
     file_size = models.IntegerField('文件大小(字节)', default=0)
     resource_type = models.CharField('类型', max_length=10, choices=RESOURCE_TYPE_CHOICES, default='pdf')
+    sale_type = models.CharField('售卖类型', max_length=10, choices=SALE_TYPE_CHOICES, default='free')
+    price = models.DecimalField('售价', max_digits=10, decimal_places=2, default=0)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='resources', verbose_name='分类')
     uploader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -143,3 +150,40 @@ class SharedResource(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ResourceOrder(models.Model):
+    """在线资料订单"""
+    STATUS_CHOICES = (
+        ('pending', '待确认'),
+        ('confirmed', '待支付'),
+        ('paid_pending', '待卖家确认'),
+        ('completed', '已完成'),
+        ('cancelled', '已取消'),
+    )
+
+    resource = models.ForeignKey(SharedResource, on_delete=models.CASCADE,
+                                 related_name='orders', verbose_name='资料')
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                              related_name='resource_buy_orders', verbose_name='买家')
+    seller = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                               related_name='resource_sell_orders', verbose_name='卖家')
+    price = models.DecimalField('成交价格', max_digits=10, decimal_places=2, default=0)
+    status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    payment_qr = models.CharField('支付二维码链接', max_length=500, blank=True, default='')
+    payment_proof = models.ImageField('支付凭证', upload_to='payment_proofs/', blank=True, null=True)
+    note = models.TextField('备注', blank=True, default='')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+    confirmed_at = models.DateTimeField('确认时间', null=True, blank=True)
+    paid_at = models.DateTimeField('支付时间', null=True, blank=True)
+    completed_at = models.DateTimeField('完成时间', null=True, blank=True)
+
+    class Meta:
+        db_table = 'resource_orders'
+        verbose_name = '资料订单'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'资料订单#{self.id} {self.resource_id}'

@@ -23,6 +23,71 @@
     </el-row>
 
     <el-row :gutter="16" style="margin-bottom: 20px;">
+      <el-col :span="24">
+        <el-card header="心愿单分类需求占比">
+          <div ref="wishlistDemandRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" style="margin-bottom: 20px;">
+      <el-col :span="8">
+        <el-card header="取消率趋势">
+          <div ref="cancelTrendRef" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card header="高取消分类">
+          <div ref="cancelCategoryRef" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card header="高取消卖家">
+          <div ref="cancelSellerRef" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" style="margin-bottom: 20px;">
+      <el-col :span="12">
+        <el-card header="售卖排行榜">
+          <div ref="salesRankRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="12">
+        <el-card header="需求排行榜（心愿单+订单）">
+          <div ref="demandRankRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" style="margin-bottom: 20px;">
+      <el-col :span="12">
+        <el-card header="优秀商家评分排行">
+          <div ref="topSellerRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="12">
+        <el-card header="价格指数与环比">
+          <div ref="priceMetricsRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-card header="价格统计明细（均值/中位数/最小/最大/同比）" style="margin-bottom: 20px;">
+      <el-table :data="priceMetricRows" size="small" stripe>
+        <el-table-column prop="month" label="月份" width="110" />
+        <el-table-column prop="avg_price" label="均价" width="90" />
+        <el-table-column prop="median_price" label="中位数" width="90" />
+        <el-table-column prop="min_price" label="最小值" width="90" />
+        <el-table-column prop="max_price" label="最大值" width="90" />
+        <el-table-column prop="price_index" label="价格指数" width="100" />
+        <el-table-column prop="mom" label="环比(%)" width="100" />
+        <el-table-column prop="yoy" label="同比(%)" width="100" />
+      </el-table>
+    </el-card>
+
+    <el-row :gutter="16" style="margin-bottom: 20px;">
       <!-- 交易类型分布 -->
       <el-col :span="8">
         <el-card header="交易类型占比">
@@ -61,7 +126,9 @@ import * as echarts from 'echarts'
 import {
   getCirculationRate, getPriceTrend, getCollegeDemand,
   getTransactionTypeDist, getCategoryDistribution,
-  getUserActivity, getPopularTextbookRank
+  getUserActivity, getPopularTextbookRank,
+  getSalesRanking, getDemandRanking, getTopSellers, getPriceMetrics, getWishlistDemand,
+  getCancellationInsights
 } from '../../api/modules'
 
 const circulationRef = ref(null)
@@ -71,6 +138,16 @@ const txTypeRef = ref(null)
 const categoryRef = ref(null)
 const activityRef = ref(null)
 const rankRef = ref(null)
+const salesRankRef = ref(null)
+const demandRankRef = ref(null)
+const topSellerRef = ref(null)
+const priceMetricsRef = ref(null)
+const wishlistDemandRef = ref(null)
+const cancelTrendRef = ref(null)
+const cancelCategoryRef = ref(null)
+const cancelSellerRef = ref(null)
+const priceMetricRows = ref([])
+const rankChartIns = ref(null)
 const rankType = ref('views')
 const charts = []
 
@@ -82,9 +159,12 @@ const initChart = (domRef) => {
 
 onMounted(async () => {
   try {
-    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes] = await Promise.all([
+    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes, salesRes, demandRes, topSellerRes, metricRes, wishDemandRes, cancelRes] = await Promise.all([
       getCirculationRate(), getPriceTrend(), getCollegeDemand(),
-      getTransactionTypeDist(), getCategoryDistribution(), getUserActivity()
+      getTransactionTypeDist(), getCategoryDistribution(), getUserActivity(),
+      getSalesRanking({ limit: 12 }), getDemandRanking({ limit: 12 }),
+      getTopSellers({ limit: 12 }), getPriceMetrics({ months: 24 }), getWishlistDemand(),
+      getCancellationInsights({ months: 12, limit: 10 })
     ])
 
     // 流通率趋势 - 折线
@@ -128,7 +208,11 @@ onMounted(async () => {
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: collegeData.map(i => i.college), axisLabel: { rotate: 30 } },
       yAxis: { type: 'value' },
-      series: [{ data: collegeData.map(i => i.count), type: 'bar', itemStyle: { color: '#67c23a' } }],
+      legend: { data: ['总订单', '取消订单'] },
+      series: [
+        { name: '总订单', data: collegeData.map(i => i.count), type: 'bar', itemStyle: { color: '#67c23a' } },
+        { name: '取消订单', data: collegeData.map(i => i.cancelled_count || 0), type: 'bar', itemStyle: { color: '#f56c6c' } }
+      ],
       grid: { left: 50, right: 20, top: 20, bottom: 60 }
     })
 
@@ -142,7 +226,8 @@ onMounted(async () => {
         data: [
           { value: txData.sell || 0, name: '出售', itemStyle: { color: '#409eff' } },
           { value: txData.rent || 0, name: '租借', itemStyle: { color: '#e6a23c' } },
-          { value: txData.free || 0, name: '赠送', itemStyle: { color: '#67c23a' } }
+          { value: txData.free || 0, name: '赠送', itemStyle: { color: '#67c23a' } },
+          { value: txData.cancelled_count || 0, name: '已取消', itemStyle: { color: '#f56c6c' } }
         ]
       }]
     })
@@ -172,6 +257,113 @@ onMounted(async () => {
     // 热门排行
     await loadRank()
 
+    // 售卖排行
+    const salesChart = initChart(salesRankRef.value)
+    const salesData = Array.isArray(salesRes.data) ? salesRes.data : []
+    salesChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: salesData.map(i => i.seller_name).reverse() },
+      series: [{
+        type: 'bar',
+        data: salesData.map(i => i.sales_amount || 0).reverse(),
+        itemStyle: { color: '#409eff' }
+      }],
+      grid: { left: 90, right: 20, top: 20, bottom: 20 }
+    })
+
+    // 需求排行
+    const demandChart = initChart(demandRankRef.value)
+    const demandData = Array.isArray(demandRes.data) ? demandRes.data : []
+    demandChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: demandData.map(i => i.title).reverse(), axisLabel: { width: 150, overflow: 'truncate' } },
+      series: [{ type: 'bar', data: demandData.map(i => i.demand_score || 0).reverse(), itemStyle: { color: '#e6a23c' } }],
+      grid: { left: 160, right: 20, top: 20, bottom: 20 }
+    })
+
+    // 优秀商家
+    const topSellerChart = initChart(topSellerRef.value)
+    const topSellerData = Array.isArray(topSellerRes.data) ? topSellerRes.data : []
+    topSellerChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['评分', '完成率'] },
+      xAxis: { type: 'category', data: topSellerData.map(i => i.seller_name), axisLabel: { rotate: 25 } },
+      yAxis: [{ type: 'value', name: '评分' }, { type: 'value', name: '完成率(%)' }],
+      series: [
+        { name: '评分', type: 'bar', data: topSellerData.map(i => i.score || 0), itemStyle: { color: '#67c23a' } },
+        { name: '完成率', type: 'line', yAxisIndex: 1, data: topSellerData.map(i => i.completion_rate || 0), itemStyle: { color: '#409eff' } }
+      ],
+      grid: { left: 50, right: 50, top: 30, bottom: 70 }
+    })
+
+    // 价格指数
+    const priceMetricsChart = initChart(priceMetricsRef.value)
+    const metricRows = metricRes.data?.metrics || []
+    priceMetricRows.value = metricRows.slice().reverse()
+    priceMetricsChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['价格指数', '环比(%)'] },
+      xAxis: { type: 'category', data: metricRows.map(i => i.month) },
+      yAxis: [{ type: 'value', name: '指数' }, { type: 'value', name: '环比(%)' }],
+      series: [
+        { name: '价格指数', type: 'line', smooth: true, data: metricRows.map(i => i.price_index || 0), itemStyle: { color: '#409eff' } },
+        { name: '环比(%)', type: 'bar', yAxisIndex: 1, data: metricRows.map(i => i.mom ?? 0), itemStyle: { color: '#f56c6c' } }
+      ],
+      grid: { left: 55, right: 50, top: 30, bottom: 40 }
+    })
+
+    // 心愿单分类需求占比
+    const wishChart = initChart(wishlistDemandRef.value)
+    const wishData = wishDemandRes.data?.by_category || []
+    wishChart.setOption({
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie',
+        radius: ['35%', '65%'],
+        roseType: 'radius',
+        data: wishData.map(i => ({ name: i.category, value: i.count }))
+      }]
+    })
+
+    // 取消率趋势
+    const cancelTrendChart = initChart(cancelTrendRef.value)
+    const cancelTrendData = cancelRes.data?.trend || []
+    cancelTrendChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['取消率(%)', '取消订单'] },
+      xAxis: { type: 'category', data: cancelTrendData.map(i => i.month) },
+      yAxis: [{ type: 'value', name: '取消率(%)' }, { type: 'value', name: '取消数' }],
+      series: [
+        { name: '取消率(%)', type: 'line', smooth: true, data: cancelTrendData.map(i => i.cancel_rate || 0), itemStyle: { color: '#f56c6c' } },
+        { name: '取消订单', type: 'bar', yAxisIndex: 1, data: cancelTrendData.map(i => i.cancelled_orders || 0), itemStyle: { color: '#e6a23c' } }
+      ],
+      grid: { left: 50, right: 50, top: 35, bottom: 35 }
+    })
+
+    // 高取消分类
+    const cancelCategoryChart = initChart(cancelCategoryRef.value)
+    const cancelCategoryData = cancelRes.data?.by_category || []
+    cancelCategoryChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: cancelCategoryData.map(i => i.category).reverse(), axisLabel: { width: 120, overflow: 'truncate' } },
+      series: [{ type: 'bar', data: cancelCategoryData.map(i => i.count || 0).reverse(), itemStyle: { color: '#f56c6c' } }],
+      grid: { left: 130, right: 20, top: 20, bottom: 20 }
+    })
+
+    // 高取消卖家
+    const cancelSellerChart = initChart(cancelSellerRef.value)
+    const cancelSellerData = cancelRes.data?.by_seller || []
+    cancelSellerChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: cancelSellerData.map(i => i.seller_name).reverse(), axisLabel: { width: 120, overflow: 'truncate' } },
+      series: [{ type: 'bar', data: cancelSellerData.map(i => i.count || 0).reverse(), itemStyle: { color: '#909399' } }],
+      grid: { left: 130, right: 20, top: 20, bottom: 20 }
+    })
+
     window.addEventListener('resize', resizeAll)
   } catch (e) { console.error(e) }
 })
@@ -180,8 +372,10 @@ const loadRank = async () => {
   try {
     const res = await getPopularTextbookRank({ type: rankType.value })
     const data = (res.data.results || res.data || []).slice(0, 15)
-    const rankChart = charts.find((_, i) => i === 6) || initChart(rankRef.value)
-    rankChart.setOption({
+    if (!rankChartIns.value) {
+      rankChartIns.value = initChart(rankRef.value)
+    }
+    rankChartIns.value.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
       yAxis: { type: 'category', data: data.map(i => i.title).reverse(), axisLabel: { width: 120, overflow: 'truncate' } },

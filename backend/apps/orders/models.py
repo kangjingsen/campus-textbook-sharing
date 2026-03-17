@@ -28,6 +28,7 @@ class Order(models.Model):
     note = models.TextField('备注', blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
+    started_at = models.DateTimeField('开始时间', null=True, blank=True)
     completed_at = models.DateTimeField('完成时间', null=True, blank=True)
 
     class Meta:

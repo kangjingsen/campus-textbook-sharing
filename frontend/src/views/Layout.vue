@@ -9,6 +9,7 @@
           <el-menu-item index="/textbooks">教材列表</el-menu-item>
           <el-menu-item v-if="userStore.isLoggedIn" index="/publish">发布教材</el-menu-item>
           <el-menu-item v-if="userStore.isLoggedIn" index="/orders">我的订单</el-menu-item>
+          <el-menu-item v-if="userStore.isLoggedIn" index="/wishlist">我的心愿单</el-menu-item>
           <el-menu-item index="/resources">在线资料</el-menu-item>
         </el-menu>
       </div>
@@ -36,6 +37,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item command="my-textbooks">我的教材</el-dropdown-item>
+                <el-dropdown-item command="wishlist">我的心愿单</el-dropdown-item>
                 <el-dropdown-item v-if="userStore.isAdmin" command="admin" divided>管理后台</el-dropdown-item>
                 <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -98,6 +100,7 @@ const handleCommand = (cmd) => {
   switch (cmd) {
     case 'profile': router.push('/profile'); break
     case 'my-textbooks': router.push('/my-textbooks'); break
+    case 'wishlist': router.push('/wishlist'); break
     case 'admin': router.push('/admin'); break
     case 'logout':
       userStore.logout()

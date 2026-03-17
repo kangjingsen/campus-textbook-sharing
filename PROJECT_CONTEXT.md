@@ -16,7 +16,7 @@ C:\Projects\textbook-sharing\
 │   │   ├── orders/         # 订单管理 (购买/借阅/交易)
 │   │   ├── messaging/      # 消息系统 (WebSocket 实时聊天)
 │   │   ├── reviews/        # 审核管理 (教材审核/敏感词过滤)
-│   │   ├── recommendations/# 推荐系统 (基于协同过滤)
+│   │   ├── recommendations/# 推荐系统 (协同过滤 + 内容推荐)
 │   │   └── statistics/     # 数据统计
 │   ├── fixtures/           # 初始数据 (30 个分类 + 8 个敏感词)
 │   ├── media/              # 上传文件目录
@@ -34,9 +34,9 @@ C:\Projects\textbook-sharing\
 ```
 
 ## 运行环境
-- **Python**: 3.8.0 (`D:\UersApps\Python\`)
+- **Python**: 3.8.0（本机安装路径）
 - **Node.js**: v24.14.0, npm 11.9.0
-- **MySQL**: 8.0.37 (`D:\UersApps\MySQLfix\`), 配置文件 `D:\UersApps\MySQLData\my.ini`
+- **MySQL**: 8.0.37（本机安装路径），配置文件（本机实际 my.ini 路径）
 - **系统代理**: `127.0.0.1:7897` (Clash VPN, 必须保持开启)
 - **数据库名**: `textbook_sharing`, 用户 `root`, 密码 `root123456`
 
@@ -61,8 +61,9 @@ C:\Projects\textbook-sharing\
 - **Textbook**: title, author, isbn, `price`(非 selling_price), original_price, `condition`(IntegerField 1-5), transaction_type, status, owner(FK)
 - **TextbookVote**: textbook(FK), user(FK), vote(SmallInt 1/-1), unique_together('textbook','user')
 - **TextbookComment**: textbook(FK), user(FK), content(TextField 500), parent(self FK, 支持嵌套回复)
-- **SharedResource**: title, description, file(FileField → resources/), file_size, resource_type(pdf/doc/ppt/other), category(FK), uploader(FK), download_count
-- **Order**: order_no(自动生成), textbook(FK), buyer(FK), seller(FK), price, status, transaction_type
+- **SharedResource**: title, description, file(FileField → resources/), file_size, resource_type(pdf/doc/ppt/other), `sale_type`(free/sell), `price`, category(FK), uploader(FK), download_count
+- **ResourceOrder**: resource(FK), buyer(FK), seller(FK), price, status(pending/confirmed/paid_pending/completed/cancelled), payment_qr, payment_proof, confirmed_at, paid_at, completed_at
+- **Order**: order_no(自动生成), textbook(FK), buyer(FK), seller(FK), price, status, transaction_type, `started_at`, completed_at
 - **TextbookCreateView** 使用 `MultiPartParser, FormParser`（非 JSON）
 
 ## 主要 API 端点
@@ -71,9 +72,12 @@ C:\Projects\textbook-sharing\
 - 管理员删除：/api/textbooks/admin/{id}/delete/
 - 点赞点踩：/api/textbooks/{id}/vote/ (GET 统计+我的投票, POST 切换)
 - 评论：/api/textbooks/{id}/comments/ (GET 列表, POST 发布), /api/textbooks/comments/{id}/delete/
-- 在线资料：/api/textbooks/resources/ (GET 列表, POST 上传), /api/textbooks/resources/{id}/ (GET 详情, DELETE 删除), /api/textbooks/resources/{id}/download/ (POST 记录下载)
-- 订单：/api/orders/create/, /api/orders/, /api/orders/{id}/confirm|complete|cancel|return/
+- 在线资料：/api/textbooks/resources/ (GET 列表, POST 上传), /api/textbooks/resources/{id}/ (GET 详情, DELETE 删除), /api/textbooks/resources/{id}/download/ (POST 授权下载)
+- 资料订单：/api/textbooks/resources/orders/create/, /api/textbooks/resources/orders/, /api/textbooks/resources/orders/{id}/confirm|complete|seller-complete|cancel/
+- 教材订单：/api/orders/create/, /api/orders/, /api/orders/{id}/confirm|complete|cancel|return/
 - 审核：/api/reviews/pending/, /api/reviews/action/{id}/, /api/reviews/sensitive-words/
+- 心愿单：/api/recommendations/wishlist/, /api/recommendations/wishlist/{id}/
+- 统计增强：/api/statistics/sales-ranking/, /api/statistics/demand-ranking/, /api/statistics/top-sellers/, /api/statistics/price-metrics/, /api/statistics/wishlist-demand/, /api/statistics/cancellation-insights/
 
 ## 特殊修复记录
 - **统计模块 500 错误修复**: MySQL 时区表为空导致 `TruncMonth`/`TruncDate` 报 `ValueError`，通过设置 `USE_TZ = False` 解决
@@ -89,6 +93,17 @@ C:\Projects\textbook-sharing\
 - **评论系统**: `TextbookComment` 模型（支持嵌套回复），本人或管理员可删除
 - **在线资料共享区**: `SharedResource` 模型，新页面 `Resources.vue`，支持上传/下载/筛选/删除，导航栏已添加入口
 - **用户公开主页**: 新页面 `UserProfile.vue`（路由 `/user/:id`），展示用户公开信息 + TA 发布的教材；教材详情页/列表页/评论区的用户名均可点击跳转
+- **心愿单系统**: 新增 `WishlistItem` 模型与 `/api/recommendations/wishlist/` 接口，支持新增/编辑/删除/状态管理，并接入推荐算法权重
+- **推荐实时刷新**: 心愿单增删改会触发推荐缓存刷新（signals）
+- **在线资料售卖**: `SharedResource` 新增 `sale_type/price`，新增 `ResourceOrder` 资料订单，支持卖家确认并填写支付二维码，买家确认支付后开放下载
+- **线下交易自动完成**: `Order` 新增 `started_at`，确认后超过 3 天自动完成（在订单查询时触发）
+- **统计增强**: 新增售卖排行榜、需求排行榜、优秀商家、取消订单专题分析、价格指标（指数/环比/同比/中位数/最大最小/均值）
+
+## 运行补充说明
+- `start.bat` 使用系统默认 `python` 启动后端（不是工作区 `.venv`）。
+- 若在 `.venv` 里执行 `manage.py`，需先安装 `backend/requirements.txt`，否则会出现 `No module named 'django'`。
+- 教材数据补齐命令：`python manage.py seed_textbooks --per-category 10`
+- 教材公开数据回填命令：`python manage.py enrich_textbooks_open_data --only-seeded`
 
 ## 待完成事项
 - [ ] 论文测试部分（黑盒测试、白盒测试、性能测试、可用性测试）

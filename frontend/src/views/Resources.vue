@@ -23,6 +23,12 @@
             <el-option v-for="cat in categories" :key="cat.id" :label="cat.full_name || cat.name" :value="cat.id" />
           </el-select>
         </el-col>
+        <el-col :span="4">
+          <el-select v-model="filters.sale_type" placeholder="收费方式" clearable @change="loadResources">
+            <el-option label="免费" value="free" />
+            <el-option label="售卖" value="sell" />
+          </el-select>
+        </el-col>
         <el-col :span="8">
           <el-input v-model="filters.search" placeholder="搜索资料..." clearable @keyup.enter="loadResources">
             <template #append>
@@ -50,8 +56,12 @@
           <p class="resource-desc">{{ res.description || '暂无描述' }}</p>
           <div class="resource-meta">
             <el-tag size="small">{{ res.resource_type_display }}</el-tag>
+            <el-tag size="small" :type="res.sale_type === 'sell' ? 'warning' : 'success'">
+              {{ res.sale_type_display }}
+            </el-tag>
             <span v-if="res.category_name" class="meta-cat">{{ res.category_name }}</span>
           </div>
+          <div class="resource-price" v-if="res.sale_type === 'sell'">¥{{ res.price }}</div>
           <div class="resource-stats">
             <span>📥 {{ res.download_count }}</span>
             <span>{{ formatSize(res.file_size) }}</span>
@@ -61,7 +71,27 @@
             <span class="time">{{ res.created_at?.slice(0, 10) }}</span>
           </div>
           <div class="resource-actions">
-            <el-button type="primary" size="small" @click="handleDownload(res)">下载</el-button>
+            <el-button
+              v-if="res.sale_type === 'sell' && !res.can_download"
+              type="warning"
+              size="small"
+              @click="handleBuyResource(res)">
+              {{ res.my_order_status ? '订单处理中' : '购买' }}
+            </el-button>
+            <el-button type="primary" size="small" :disabled="!res.can_download" @click="handleDownload(res)">下载</el-button>
+            <el-button
+              v-if="res.my_order_status === 'confirmed'"
+              size="small"
+              type="success"
+              @click="handlePaid(res)">
+              上传支付凭证
+            </el-button>
+            <el-button
+              v-if="res.my_order_status === 'confirmed' && res.my_payment_qr"
+              size="small"
+              @click="showQr(res.my_payment_qr)">
+              支付二维码
+            </el-button>
             <el-button v-if="userStore.user?.id === res.uploader || userStore.isAdmin"
                        type="danger" size="small" @click="handleDeleteResource(res.id)">删除</el-button>
           </div>
@@ -102,6 +132,15 @@
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
+        <el-form-item label="售卖方式">
+          <el-radio-group v-model="uploadForm.sale_type">
+            <el-radio value="free">免费共享</el-radio>
+            <el-radio value="sell">售卖资料</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="价格" v-if="uploadForm.sale_type === 'sell'">
+          <el-input-number v-model="uploadForm.price" :min="0.1" :precision="2" :step="1" />
+        </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="uploadForm.category" placeholder="可选" clearable>
             <el-option v-for="cat in categories" :key="cat.id" :label="cat.full_name || cat.name" :value="cat.id" />
@@ -113,13 +152,33 @@
         <el-button type="primary" @click="submitUpload" :loading="uploading">上传</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="qrVisible" title="支付二维码" width="420px">
+      <div style="text-align:center;">
+        <img v-if="currentQr" :src="currentQr" style="max-width:100%;max-height:300px;" />
+        <div v-else>暂无二维码</div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="proofVisible" title="上传支付凭证" width="460px">
+      <el-upload :auto-upload="false" :limit="1" :show-file-list="true" :on-change="handleProofChange" accept="image/*">
+        <el-button>选择凭证图片</el-button>
+      </el-upload>
+      <template #footer>
+        <el-button @click="proofVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitProof">提交凭证</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getResources, uploadResource, deleteResource, downloadResource, getCategoryFlat } from '../api/modules'
+import {
+  getResources, uploadResource, deleteResource, downloadResource, getCategoryFlat,
+  createResourceOrder, completeResourceOrder
+} from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -130,10 +189,16 @@ const page = ref(1)
 const loading = ref(false)
 const uploadVisible = ref(false)
 const uploading = ref(false)
+const qrVisible = ref(false)
+const currentQr = ref('')
+const proofVisible = ref(false)
+const proofOrderId = ref(null)
+const paymentProof = ref(null)
 
 const filters = reactive({
   resource_type: '',
   category: '',
+  sale_type: '',
   search: '',
   ordering: '-created_at'
 })
@@ -143,6 +208,8 @@ const uploadForm = reactive({
   description: '',
   file: null,
   resource_type: 'pdf',
+  sale_type: 'free',
+  price: 0,
   category: null
 })
 
@@ -169,6 +236,7 @@ const loadResources = async () => {
     const params = { page: page.value, ordering: filters.ordering }
     if (filters.resource_type) params.resource_type = filters.resource_type
     if (filters.category) params.category = filters.category
+    if (filters.sale_type) params.sale_type = filters.sale_type
     if (filters.search) params.search = filters.search
     const res = await getResources(params)
     resources.value = res.data.results || res.data || []
@@ -193,6 +261,8 @@ const submitUpload = async () => {
     uploadForm.title = ''
     uploadForm.description = ''
     uploadForm.file = null
+    uploadForm.sale_type = 'free'
+    uploadForm.price = 0
     await loadResources()
   } catch {} finally {
     uploading.value = false
@@ -200,11 +270,56 @@ const submitUpload = async () => {
 }
 
 const handleDownload = async (res) => {
+  if (!res.can_download) {
+    return ElMessage.warning('请先完成资料支付流程')
+  }
   try {
-    await downloadResource(res.id)
+    const resp = await downloadResource(res.id)
+    const fileUrl = resp?.data?.file || res.file
+    if (!fileUrl) {
+      return ElMessage.warning('文件链接不存在，请联系管理员')
+    }
+    window.open(fileUrl, '_blank')
   } catch {}
-  // 打开文件下载
-  window.open(res.file, '_blank')
+}
+
+const handleBuyResource = async (res) => {
+  if (!userStore.isLoggedIn) return ElMessage.warning('请先登录')
+  if (res.my_order_status) return ElMessage.info('已有进行中的订单')
+  try {
+    await createResourceOrder({ resource_id: res.id })
+    ElMessage.success('订单已创建，等待卖家确认并提供支付二维码')
+    await loadResources()
+  } catch {}
+}
+
+const handlePaid = async (res) => {
+  if (!res.my_order_id) return
+  proofOrderId.value = res.my_order_id
+  paymentProof.value = null
+  proofVisible.value = true
+}
+
+const handleProofChange = (file) => {
+  paymentProof.value = file.raw
+}
+
+const submitProof = async () => {
+  if (!proofOrderId.value) return
+  if (!paymentProof.value) return ElMessage.warning('请先选择支付凭证图片')
+  const formData = new FormData()
+  formData.append('payment_proof', paymentProof.value)
+  try {
+    await completeResourceOrder(proofOrderId.value, formData)
+    ElMessage.success('凭证已提交，等待卖家确认')
+    proofVisible.value = false
+    await loadResources()
+  } catch {}
+}
+
+const showQr = (qr) => {
+  currentQr.value = qr
+  qrVisible.value = true
 }
 
 const handleDeleteResource = async (id) => {

@@ -3,10 +3,30 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.db.models import Q
+from datetime import timedelta
 
 from apps.textbooks.models import Textbook
 from .models import Order
 from .serializers import OrderSerializer, OrderCreateSerializer
+
+
+def auto_complete_expired_orders_for_user(user):
+    """订单确认后 3 天自动完成（线下交易兜底）"""
+    expire_at = timezone.now() - timedelta(days=3)
+    expired = Order.objects.filter(
+        status='confirmed',
+        started_at__isnull=False,
+        started_at__lte=expire_at
+    ).filter(Q(buyer=user) | Q(seller=user)).select_related('textbook')
+
+    for order in expired:
+        order.status = 'completed'
+        order.completed_at = timezone.now()
+        order.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        textbook = order.textbook
+        textbook.status = 'rented' if order.transaction_type == 'rent' else 'sold'
+        textbook.save(update_fields=['status'])
 
 
 class OrderCreateView(APIView):
@@ -56,6 +76,7 @@ class OrderListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        auto_complete_expired_orders_for_user(user)
         role = self.request.query_params.get('role', 'all')
         order_status = self.request.query_params.get('status')
 
@@ -78,6 +99,7 @@ class OrderDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        auto_complete_expired_orders_for_user(user)
         return Order.objects.filter(Q(buyer=user) | Q(seller=user))
 
 
@@ -91,7 +113,8 @@ class OrderConfirmView(APIView):
             return Response({'error': '订单不存在'}, status=status.HTTP_404_NOT_FOUND)
 
         order.status = 'confirmed'
-        order.save(update_fields=['status', 'updated_at'])
+        order.started_at = timezone.now()
+        order.save(update_fields=['status', 'started_at', 'updated_at'])
         return Response({'message': '订单已确认'})
 
 

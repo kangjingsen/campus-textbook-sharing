@@ -66,13 +66,69 @@
                        layout="prev, pager, next, total" @current-change="loadOrders" />
       </div>
     </el-card>
+
+    <el-card style="margin-top: 16px;">
+      <template #header><h3>📂 资料订单</h3></template>
+      <el-table :data="resourceOrders" v-loading="resourceLoading" stripe>
+        <el-table-column prop="id" label="订单ID" width="100" />
+        <el-table-column prop="resource_title" label="资料" min-width="220" />
+        <el-table-column label="对方" width="120">
+          <template #default="{ row }">
+            {{ row.buyer === userStore.user?.id ? row.seller_name : row.buyer_name }}
+          </template>
+        </el-table-column>
+        <el-table-column label="价格" width="100">
+          <template #default="{ row }">¥{{ row.price }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTag(row.status)" size="small">{{ row.status_display }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="280" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.seller === userStore.user?.id && row.status === 'pending'"
+              size="small"
+              type="primary"
+              @click="handleConfirmResource(row.id)">
+              确认并给二维码
+            </el-button>
+            <el-button
+              v-if="row.buyer === userStore.user?.id && row.status === 'confirmed'"
+              size="small"
+              type="success"
+              @click="handleCompleteResource(row.id)">
+              上传支付凭证
+            </el-button>
+            <el-button
+              v-if="row.seller === userStore.user?.id && row.status === 'paid_pending'"
+              size="small"
+              type="primary"
+              @click="handleSellerCompleteResource(row.id)">
+              确认收款
+            </el-button>
+            <el-button
+              v-if="['pending','confirmed'].includes(row.status)"
+              size="small"
+              type="danger"
+              @click="handleCancelResource(row.id)">
+              取消
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getOrders, confirmOrder, completeOrder, cancelOrder, returnOrder } from '../api/modules'
+import {
+  getOrders, confirmOrder, completeOrder, cancelOrder, returnOrder,
+  getResourceOrders, confirmResourceOrder, completeResourceOrder, sellerCompleteResourceOrder, cancelResourceOrder
+} from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -82,13 +138,18 @@ const total = ref(0)
 const page = ref(1)
 const activeRole = ref('all')
 const statusFilter = ref('')
+const resourceOrders = ref([])
+const resourceLoading = ref(false)
 
 const getStatusTag = (s) => ({
   pending: 'warning', confirmed: '', completed: 'success',
-  cancelled: 'info', returned: 'success'
+  paid_pending: 'warning', cancelled: 'info', returned: 'success'
 }[s] || '')
 
-onMounted(() => loadOrders())
+onMounted(async () => {
+  await loadOrders()
+  await loadResourceOrders()
+})
 
 const loadOrders = async () => {
   loading.value = true
@@ -101,6 +162,7 @@ const loadOrders = async () => {
   } catch {} finally {
     loading.value = false
   }
+  loadResourceOrders()
 }
 
 const handleConfirm = async (id) => {
@@ -129,6 +191,62 @@ const handleReturn = async (id) => {
   await returnOrder(id)
   ElMessage.success('已归还')
   loadOrders()
+}
+
+const loadResourceOrders = async () => {
+  resourceLoading.value = true
+  try {
+    const res = await getResourceOrders({ role: activeRole.value === 'all' ? undefined : activeRole.value })
+    resourceOrders.value = res.data.results || res.data || []
+  } catch {} finally {
+    resourceLoading.value = false
+  }
+}
+
+const handleConfirmResource = async (id) => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入支付二维码图片链接(URL)', '确认资料订单')
+    await confirmResourceOrder(id, { payment_qr: value })
+    ElMessage.success('已确认并发送二维码')
+    loadResourceOrders()
+  } catch {}
+}
+
+const handleCompleteResource = async (id) => {
+  try {
+    await ElMessageBox.confirm('请选择支付凭证图片后提交，提交后将等待卖家确认收款。', '上传支付凭证')
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async () => {
+      const file = input.files && input.files[0]
+      if (!file) return
+      const formData = new FormData()
+      formData.append('payment_proof', file)
+      await completeResourceOrder(id, formData)
+      ElMessage.success('凭证已提交，等待卖家确认')
+      loadResourceOrders()
+    }
+    input.click()
+  } catch {}
+}
+
+const handleSellerCompleteResource = async (id) => {
+  try {
+    await ElMessageBox.confirm('确认已收款并完成该资料订单？', '提示')
+    await sellerCompleteResourceOrder(id)
+    ElMessage.success('订单完成，买家已可下载')
+    loadResourceOrders()
+  } catch {}
+}
+
+const handleCancelResource = async (id) => {
+  try {
+    await ElMessageBox.confirm('确认取消资料订单？', '提示', { type: 'warning' })
+    await cancelResourceOrder(id)
+    ElMessage.success('已取消')
+    loadResourceOrders()
+  } catch {}
 }
 </script>
 

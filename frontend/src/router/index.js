@@ -68,6 +68,12 @@ const routes = [
         component: () => import('../views/Resources.vue')
       },
       {
+        path: 'wishlist',
+        name: 'Wishlist',
+        component: () => import('../views/Wishlist.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'user/:id',
         name: 'UserProfile',
         component: () => import('../views/UserProfile.vue')

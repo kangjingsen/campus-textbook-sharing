@@ -19,10 +19,12 @@
 - 🛒 下单交易、订单管理
 - 💬 WebSocket 实时私信聊天
 - 🎯 个性化推荐（协同过滤 + 内容推荐混合算法）
+- 💖 心愿单（记录需求、驱动推荐优化）
 - 👤 个人中心、浏览历史
 - 👍 教材点赞/点踩
 - 💬 教材评论（支持嵌套回复）
 - 📂 在线资料共享区（上传/下载/管理电子资料）
+- 🧾 在线资料售卖（资料订单、卖家确认后提供支付二维码、支付后下载）
 
 ### 管理端
 - 📊 数据概览仪表盘
@@ -32,6 +34,9 @@
 - 📂 分类管理（多级分类树）
 - 🚫 敏感词管理
 - 📈 多维统计分析（流通率、价格趋势、学院需求、热门排行等）
+- 🏆 售卖排行榜、需求排行榜、优秀商家
+- 📉 取消订单专题分析（取消率趋势、高取消分类/卖家）
+- 📊 价格统计增强（价格指数、环比、同比、最大最小值、中位数、平均数）
 
 ## 核心算法
 
@@ -74,6 +79,23 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### 数据初始化与教材回填（可选）
+
+```bash
+cd backend
+
+# 1) 给末级分类补教材（默认每类补到10本）
+python manage.py seed_textbooks --per-category 10
+
+# 2) 仅对自动生成教材进行公开数据回填（书名/作者/简介/封面）
+python manage.py enrich_textbooks_open_data --only-seeded
+
+# 3) 查看回填覆盖率
+python manage.py shell -c "from apps.textbooks.models import Textbook; total=Textbook.objects.count(); open_data=Textbook.objects.filter(description__startswith='[OPEN_DATA').count(); seeded=Textbook.objects.filter(description__startswith='[AUTO_SEED]').count(); print('total=', total, 'open_data=', open_data, 'auto_seed=', seeded)"
+```
+
+说明：`start.bat` 默认走系统 `python`，不是工作区 `.venv`。
 
 ## 项目结构
 
@@ -124,7 +146,9 @@ textbook-sharing/
 | 消息 | `/api/messages/` | 会话、消息、未读数 |
 | 审核 | `/api/reviews/` | 待审列表、审核操作 |
 | 推荐 | `/api/recommendations/` | 个性化推荐、热门 |
+| 心愿单 | `/api/recommendations/wishlist/` | 心愿单增删改查 |
 | 统计 | `/api/statistics/` | 多维统计数据 |
+| 资料订单 | `/api/textbooks/resources/orders/` | 资料订单创建、确认、支付完成、取消 |
 | WebSocket | `ws://host/ws/chat/<id>/` | 实时聊天 |
 
 ## 环境变量

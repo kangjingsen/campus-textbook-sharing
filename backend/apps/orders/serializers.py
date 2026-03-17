@@ -15,9 +15,9 @@ class OrderSerializer(serializers.ModelSerializer):
                   'buyer', 'buyer_name', 'seller', 'seller_name',
                   'transaction_type', 'price', 'status', 'status_display',
                   'rent_start_date', 'rent_end_date', 'note',
-                  'created_at', 'updated_at', 'completed_at']
+                  'created_at', 'updated_at', 'started_at', 'completed_at']
         read_only_fields = ['id', 'order_no', 'buyer', 'seller', 'transaction_type',
-                           'price', 'created_at', 'updated_at', 'completed_at']
+                           'price', 'created_at', 'updated_at', 'started_at', 'completed_at']
 
 
 class OrderCreateSerializer(serializers.Serializer):

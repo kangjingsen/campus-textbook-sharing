@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource
+from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource, ResourceOrder
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -25,6 +25,13 @@ class TextbookCommentAdmin(admin.ModelAdmin):
 
 @admin.register(SharedResource)
 class SharedResourceAdmin(admin.ModelAdmin):
-    list_display = ['title', 'resource_type', 'uploader', 'download_count', 'created_at']
-    list_filter = ['resource_type', 'category']
+    list_display = ['title', 'resource_type', 'sale_type', 'price', 'uploader', 'download_count', 'created_at']
+    list_filter = ['resource_type', 'sale_type', 'category']
     search_fields = ['title', 'description']
+
+
+@admin.register(ResourceOrder)
+class ResourceOrderAdmin(admin.ModelAdmin):
+    list_display = ['id', 'resource', 'buyer', 'seller', 'price', 'status', 'created_at', 'completed_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['resource__title', 'buyer__username', 'seller__username']

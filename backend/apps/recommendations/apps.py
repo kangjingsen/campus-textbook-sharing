@@ -5,3 +5,6 @@ class RecommendationsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.recommendations'
     verbose_name = '推荐系统'
+
+    def ready(self):
+        from . import signals  # noqa: F401

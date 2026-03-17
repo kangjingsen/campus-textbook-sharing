@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 
 from apps.textbooks.models import Textbook
 from apps.textbooks.serializers import TextbookListSerializer
-from .models import BrowsingHistory, RecommendationCache
-from .serializers import BrowsingHistorySerializer, RecommendationSerializer
+from .models import BrowsingHistory, RecommendationCache, WishlistItem
+from .serializers import BrowsingHistorySerializer, RecommendationSerializer, WishlistItemSerializer
 from .tasks import update_user_recommendations
 
 
@@ -51,3 +51,26 @@ class BrowsingHistoryListView(generics.ListAPIView):
 
     def get_queryset(self):
         return BrowsingHistory.objects.filter(user=self.request.user).order_by('-last_viewed_at')
+
+
+class WishlistListCreateView(generics.ListCreateAPIView):
+    """我的心愿单"""
+    serializer_class = WishlistItemSerializer
+
+    def get_queryset(self):
+        qs = WishlistItem.objects.filter(user=self.request.user)
+        status_val = self.request.query_params.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class WishlistDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """心愿单项详情"""
+    serializer_class = WishlistItemSerializer
+
+    def get_queryset(self):
+        return WishlistItem.objects.filter(user=self.request.user)

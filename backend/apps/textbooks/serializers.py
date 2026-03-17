@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource
+from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource, ResourceOrder
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -118,23 +118,94 @@ class SharedResourceSerializer(serializers.ModelSerializer):
     uploader_name = serializers.CharField(source='uploader.username', read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True, default='')
     resource_type_display = serializers.CharField(source='get_resource_type_display', read_only=True)
+    sale_type_display = serializers.CharField(source='get_sale_type_display', read_only=True)
+    can_download = serializers.SerializerMethodField()
+    my_order_id = serializers.SerializerMethodField()
+    my_order_status = serializers.SerializerMethodField()
+    my_payment_qr = serializers.SerializerMethodField()
 
     class Meta:
         model = SharedResource
         fields = ['id', 'title', 'description', 'file', 'file_size', 'resource_type',
-                  'resource_type_display', 'category', 'category_name',
-                  'uploader', 'uploader_name', 'download_count', 'created_at']
+                  'resource_type_display', 'sale_type', 'sale_type_display', 'price',
+                  'category', 'category_name',
+                  'uploader', 'uploader_name', 'download_count',
+                  'can_download', 'my_order_id', 'my_order_status', 'my_payment_qr',
+                  'created_at']
         read_only_fields = ['uploader', 'file_size', 'download_count', 'created_at']
+
+    def _my_order(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        return ResourceOrder.objects.filter(resource=obj, buyer=request.user).order_by('-created_at').first()
+
+    def get_can_download(self, obj):
+        request = self.context.get('request')
+        if obj.sale_type == 'free':
+            return True
+        if not request or not request.user.is_authenticated:
+            return False
+        if request.user.id == obj.uploader_id or request.user.role in ('admin', 'superadmin'):
+            return True
+        return ResourceOrder.objects.filter(resource=obj, buyer=request.user, status='completed').exists()
+
+    def get_my_order_id(self, obj):
+        order = self._my_order(obj)
+        return order.id if order else None
+
+    def get_my_order_status(self, obj):
+        order = self._my_order(obj)
+        return order.status if order else ''
+
+    def get_my_payment_qr(self, obj):
+        order = self._my_order(obj)
+        return order.payment_qr if order else ''
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        can_download = data.get('can_download', False)
+        if instance.sale_type == 'sell' and not can_download:
+            data['file'] = ''
+        return data
 
 
 class SharedResourceCreateSerializer(serializers.ModelSerializer):
     """共享资料上传序列化器"""
     class Meta:
         model = SharedResource
-        fields = ['title', 'description', 'file', 'resource_type', 'category']
+        fields = ['title', 'description', 'file', 'resource_type', 'sale_type', 'price', 'category']
+
+    def validate(self, attrs):
+        if attrs.get('sale_type') == 'free':
+            attrs['price'] = 0
+        elif attrs.get('price', 0) <= 0:
+            raise serializers.ValidationError({'price': '售卖资料价格必须大于 0'})
+        return attrs
 
     def create(self, validated_data):
         validated_data['uploader'] = self.context['request'].user
         if validated_data.get('file'):
             validated_data['file_size'] = validated_data['file'].size
         return super().create(validated_data)
+
+
+class ResourceOrderSerializer(serializers.ModelSerializer):
+    resource_title = serializers.CharField(source='resource.title', read_only=True)
+    buyer_name = serializers.CharField(source='buyer.username', read_only=True)
+    seller_name = serializers.CharField(source='seller.username', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = ResourceOrder
+        fields = [
+            'id', 'resource', 'resource_title', 'buyer', 'buyer_name', 'seller', 'seller_name',
+            'price', 'status', 'status_display', 'payment_qr', 'payment_proof', 'note',
+            'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at'
+        ]
+        read_only_fields = ['id', 'buyer', 'seller', 'price', 'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at']
+
+
+class ResourceOrderCreateSerializer(serializers.Serializer):
+    resource_id = serializers.IntegerField()
+    note = serializers.CharField(required=False, default='', allow_blank=True)

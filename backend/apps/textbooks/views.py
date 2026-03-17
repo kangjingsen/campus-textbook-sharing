@@ -7,13 +7,15 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Q, F, Count, Sum, Case, When, IntegerField
 
-from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource
+from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource, ResourceOrder
 from .serializers import (
     CategorySerializer, CategoryFlatSerializer,
     TextbookListSerializer, TextbookDetailSerializer, TextbookCreateSerializer,
-    TextbookCommentSerializer, SharedResourceSerializer, SharedResourceCreateSerializer
+    TextbookCommentSerializer, SharedResourceSerializer, SharedResourceCreateSerializer,
+    ResourceOrderSerializer, ResourceOrderCreateSerializer
 )
 from utils.permissions import IsOwnerOrAdmin, IsAdmin
+from django.utils import timezone
 
 
 class CategoryTreeView(generics.ListAPIView):
@@ -257,7 +259,7 @@ class TextbookCommentDeleteView(generics.DestroyAPIView):
 class SharedResourceListView(generics.ListCreateAPIView):
     """资料列表 / 上传资料"""
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['resource_type', 'category']
+    filterset_fields = ['resource_type', 'category', 'sale_type']
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'download_count']
     ordering = ['-created_at']
@@ -308,5 +310,163 @@ class SharedResourceDownloadView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request, pk):
+        try:
+            resource = SharedResource.objects.get(pk=pk)
+        except SharedResource.DoesNotExist:
+            return Response({'error': '资料不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        can_download = resource.sale_type == 'free'
+        if request.user.is_authenticated:
+            if request.user.id == resource.uploader_id or request.user.role in ('admin', 'superadmin'):
+                can_download = True
+            elif ResourceOrder.objects.filter(resource=resource, buyer=request.user, status='completed').exists():
+                can_download = True
+
+        if not can_download:
+            return Response({'error': '请先完成资料订单支付后下载'}, status=status.HTTP_403_FORBIDDEN)
+
         SharedResource.objects.filter(pk=pk).update(download_count=F('download_count') + 1)
-        return Response({'message': 'ok'})
+        return Response({'message': 'ok', 'file': resource.file.url if resource.file else ''})
+
+
+class ResourceOrderCreateView(APIView):
+    """创建资料订单"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ResourceOrderCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            resource = SharedResource.objects.get(pk=serializer.validated_data['resource_id'])
+        except SharedResource.DoesNotExist:
+            return Response({'error': '资料不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if resource.sale_type == 'free':
+            return Response({'error': '免费资料无需下单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if resource.uploader_id == request.user.id:
+            return Response({'error': '不能购买自己的资料'}, status=status.HTTP_400_BAD_REQUEST)
+
+        exists = ResourceOrder.objects.filter(
+            resource=resource,
+            buyer=request.user,
+            status__in=['pending', 'confirmed', 'completed']
+        ).exists()
+        if exists:
+            return Response({'error': '您已有该资料订单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = ResourceOrder.objects.create(
+            resource=resource,
+            buyer=request.user,
+            seller=resource.uploader,
+            price=resource.price,
+            note=serializer.validated_data.get('note', '')
+        )
+        return Response({'message': '资料订单创建成功', 'order': ResourceOrderSerializer(order).data}, status=status.HTTP_201_CREATED)
+
+
+class ResourceOrderListView(generics.ListAPIView):
+    """资料订单列表"""
+    serializer_class = ResourceOrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        role = self.request.query_params.get('role', 'all')
+        order_status = self.request.query_params.get('status')
+        qs = ResourceOrder.objects.all()
+        if role == 'buyer':
+            qs = qs.filter(buyer=self.request.user)
+        elif role == 'seller':
+            qs = qs.filter(seller=self.request.user)
+        else:
+            qs = qs.filter(Q(buyer=self.request.user) | Q(seller=self.request.user))
+
+        if order_status:
+            qs = qs.filter(status=order_status)
+        return qs
+
+
+class ResourceOrderDetailView(generics.RetrieveAPIView):
+    """资料订单详情"""
+    serializer_class = ResourceOrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return ResourceOrder.objects.filter(Q(buyer=self.request.user) | Q(seller=self.request.user))
+
+
+class ResourceOrderConfirmView(APIView):
+    """卖家确认资料订单并给出支付二维码"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        qr = request.data.get('payment_qr', '').strip()
+        if not qr:
+            return Response({'error': '请提供 payment_qr'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order = ResourceOrder.objects.get(pk=pk, seller=request.user, status='pending')
+        except ResourceOrder.DoesNotExist:
+            return Response({'error': '订单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        order.status = 'confirmed'
+        order.payment_qr = qr
+        order.confirmed_at = timezone.now()
+        order.save(update_fields=['status', 'payment_qr', 'confirmed_at', 'updated_at'])
+        return Response({'message': '订单已确认，支付二维码已生成'})
+
+
+class ResourceOrderCompleteView(APIView):
+    """买家确认支付完成"""
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk):
+        try:
+            order = ResourceOrder.objects.get(pk=pk, buyer=request.user, status='confirmed')
+        except ResourceOrder.DoesNotExist:
+            return Response({'error': '订单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        proof = request.FILES.get('payment_proof')
+        if not proof:
+            return Response({'error': '请上传支付凭证'}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.status = 'paid_pending'
+        order.payment_proof = proof
+        order.paid_at = timezone.now()
+        order.save(update_fields=['status', 'payment_proof', 'paid_at', 'updated_at'])
+        return Response({'message': '支付凭证已提交，等待卖家确认'})
+
+
+class ResourceOrderSellerCompleteView(APIView):
+    """卖家确认收款并完成订单"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            order = ResourceOrder.objects.get(pk=pk, seller=request.user, status='paid_pending')
+        except ResourceOrder.DoesNotExist:
+            return Response({'error': '订单不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        order.status = 'completed'
+        order.completed_at = timezone.now()
+        order.save(update_fields=['status', 'completed_at', 'updated_at'])
+        return Response({'message': '已确认收款，订单完成，买家可下载'})
+
+
+class ResourceOrderCancelView(APIView):
+    """取消资料订单"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            order = ResourceOrder.objects.get(pk=pk, status__in=['pending', 'confirmed'])
+            if order.buyer_id != request.user.id and order.seller_id != request.user.id:
+                raise ResourceOrder.DoesNotExist
+        except ResourceOrder.DoesNotExist:
+            return Response({'error': '订单不存在或无法取消'}, status=status.HTTP_404_NOT_FOUND)
+
+        order.status = 'cancelled'
+        order.save(update_fields=['status', 'updated_at'])
+        return Response({'message': '已取消'})

@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 
 from apps.textbooks.models import Textbook
 from apps.orders.models import Order
-from .models import BrowsingHistory, UserPreference
+from .models import BrowsingHistory, UserPreference, WishlistItem
 
 
 def compute_user_preferences(user_id):
@@ -45,6 +45,15 @@ def compute_user_preferences(user_id):
     )
     for item in completed:
         preference_scores[item['textbook__category_id']] += item['count'] * 2.0  # 额外加分
+
+    # 心愿单分类偏好
+    wished = WishlistItem.objects.filter(
+        user_id=user_id,
+        status='open',
+        category__isnull=False
+    ).values('category_id', 'priority')
+    for item in wished:
+        preference_scores[item['category_id']] += max(item['priority'], 1) * 4.0
 
     # 保存偏好分数
     for category_id, score in preference_scores.items():
@@ -103,6 +112,28 @@ def get_content_recommendations(user_id, top_k=10):
                 'textbook_id': tb.id,
                 'score': score,
                 'reason': f'基于您对「{tb.category.name}」的兴趣'
+            })
+
+    # 心愿单关键词补充推荐（支持无分类心愿）
+    wish_items = WishlistItem.objects.filter(user_id=user_id, status='open').order_by('-priority')[:10]
+    for wish in wish_items:
+        keyword = (wish.title or '').strip()
+        if not keyword:
+            continue
+        keyword_candidates = Textbook.objects.filter(
+            status='approved',
+            title__icontains=keyword
+        ).exclude(
+            id__in=interacted_ids
+        ).exclude(
+            owner_id=user_id
+        )[:top_k]
+        for tb in keyword_candidates:
+            score = 5.0 * max(wish.priority, 1)
+            recommendations.append({
+                'textbook_id': tb.id,
+                'score': score,
+                'reason': f'匹配您的心愿单「{wish.title}」'
             })
 
     # 去重并排序
