@@ -76,7 +76,7 @@
               type="warning"
               size="small"
               @click="handleBuyResource(res)">
-              {{ res.my_order_status ? '订单处理中' : '购买' }}
+              {{ hasActiveOrder(res) ? '订单处理中' : '购买' }}
             </el-button>
             <el-button type="primary" size="small" :disabled="!res.can_download" @click="handleDownload(res)">下载</el-button>
             <el-button
@@ -214,6 +214,8 @@ const uploadForm = reactive({
 })
 
 const typeIcon = (type) => ({ pdf: '📄', doc: '📝', ppt: '📊', other: '📁' }[type] || '📁')
+const ACTIVE_ORDER_STATUSES = ['pending', 'confirmed', 'paid_pending']
+const hasActiveOrder = (res) => ACTIVE_ORDER_STATUSES.includes(res?.my_order_status)
 
 const formatSize = (bytes) => {
   if (!bytes) return '未知'
@@ -285,7 +287,7 @@ const handleDownload = async (res) => {
 
 const handleBuyResource = async (res) => {
   if (!userStore.isLoggedIn) return ElMessage.warning('请先登录')
-  if (res.my_order_status) return ElMessage.info('已有进行中的订单')
+  if (hasActiveOrder(res)) return ElMessage.info('已有进行中的订单')
   try {
     await createResourceOrder({ resource_id: res.id })
     ElMessage.success('订单已创建，等待卖家确认并提供支付二维码')

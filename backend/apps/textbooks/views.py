@@ -351,7 +351,7 @@ class ResourceOrderCreateView(APIView):
         exists = ResourceOrder.objects.filter(
             resource=resource,
             buyer=request.user,
-            status__in=['pending', 'confirmed', 'completed']
+            status__in=['pending', 'confirmed', 'paid_pending', 'completed']
         ).exists()
         if exists:
             return Response({'error': '您已有该资料订单'}, status=status.HTTP_400_BAD_REQUEST)
