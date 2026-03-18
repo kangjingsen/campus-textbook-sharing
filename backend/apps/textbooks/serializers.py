@@ -160,7 +160,11 @@ class SharedResourceSerializer(serializers.ModelSerializer):
 
     def get_my_payment_qr(self, obj):
         order = self._my_order(obj)
-        return order.payment_qr if order else ''
+        if not order:
+            return ''
+        if order.payment_qr_image:
+            return order.payment_qr_image.url
+        return order.payment_qr
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -200,7 +204,7 @@ class ResourceOrderSerializer(serializers.ModelSerializer):
         model = ResourceOrder
         fields = [
             'id', 'resource', 'resource_title', 'buyer', 'buyer_name', 'seller', 'seller_name',
-            'price', 'status', 'status_display', 'payment_qr', 'payment_proof', 'note',
+            'price', 'status', 'status_display', 'payment_qr', 'payment_qr_image', 'payment_proof', 'note',
             'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at'
         ]
         read_only_fields = ['id', 'buyer', 'seller', 'price', 'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at']

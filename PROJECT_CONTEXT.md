@@ -62,12 +62,12 @@ C:\Projects\textbook-sharing\
 - **TextbookVote**: textbook(FK), user(FK), vote(SmallInt 1/-1), unique_together('textbook','user')
 - **TextbookComment**: textbook(FK), user(FK), content(TextField 500), parent(self FK, 支持嵌套回复)
 - **SharedResource**: title, description, file(FileField → resources/), file_size, resource_type(pdf/doc/ppt/other), `sale_type`(free/sell), `price`, category(FK), uploader(FK), download_count
-- **ResourceOrder**: resource(FK), buyer(FK), seller(FK), price, status(pending/confirmed/paid_pending/completed/cancelled), payment_qr, payment_proof, confirmed_at, paid_at, completed_at
+- **ResourceOrder**: resource(FK), buyer(FK), seller(FK), price, status(pending/confirmed/paid_pending/completed/cancelled), payment_qr, payment_qr_image, payment_proof, confirmed_at, paid_at, completed_at
 - **Order**: order_no(自动生成), textbook(FK), buyer(FK), seller(FK), price, status, transaction_type, `started_at`, completed_at
 - **TextbookCreateView** 使用 `MultiPartParser, FormParser`（非 JSON）
 
 ## 主要 API 端点
-- 用户：/api/users/register/, /api/users/login/, /api/users/profile/, /api/users/change-password/, /api/users/{id}/ (AllowAny, 公开主页)
+- 用户：/api/users/register/, /api/users/login/, /api/users/token/refresh/, /api/users/forgot-password/, /api/users/reset-password/, /api/users/profile/, /api/users/change-password/, /api/users/{id}/ (AllowAny, 公开主页)
 - 教材：/api/textbooks/, /api/textbooks/create/, /api/textbooks/search/, /api/textbooks/{id}/, /api/textbooks/my/, /api/textbooks/categories/tree/
 - 管理员删除：/api/textbooks/admin/{id}/delete/
 - 点赞点踩：/api/textbooks/{id}/vote/ (GET 统计+我的投票, POST 切换)
@@ -96,12 +96,16 @@ C:\Projects\textbook-sharing\
 - **心愿单系统**: 新增 `WishlistItem` 模型与 `/api/recommendations/wishlist/` 接口，支持新增/编辑/删除/状态管理，并接入推荐算法权重
 - **推荐实时刷新**: 心愿单增删改会触发推荐缓存刷新（signals）
 - **在线资料售卖**: `SharedResource` 新增 `sale_type/price`，新增 `ResourceOrder` 资料订单，支持卖家确认并填写支付二维码，买家确认支付后开放下载
+- **资料支付二维码图片**: `ResourceOrder` 新增 `payment_qr_image`，卖家确认资料订单时可直接上传二维码图片，买家可直接查看图片支付
+- **订单提醒角标**: 导航栏“我的订单”与订单页新增待处理订单提醒（轮询统计卖家待确认订单）
+- **忘记密码流程**: 新增 `/api/users/forgot-password/` 与 `/api/users/reset-password/`，通过邮箱重置链接设置新密码
 - **线下交易自动完成**: `Order` 新增 `started_at`，确认后超过 3 天自动完成（在订单查询时触发）
 - **统计增强**: 新增售卖排行榜、需求排行榜、优秀商家、取消订单专题分析、价格指标（指数/环比/同比/中位数/最大最小/均值）
 
 ## 运行补充说明
 - `start.bat` 使用系统默认 `python` 启动后端（不是工作区 `.venv`）。
 - 若在 `.venv` 里执行 `manage.py`，需先安装 `backend/requirements.txt`，否则会出现 `No module named 'django'`。
+- 本地默认邮件后端为 console（重置邮件打印到后端终端）；配置 SMTP 环境变量后可真实发信。
 - 教材数据补齐命令：`python manage.py seed_textbooks --per-category 10`
 - 教材公开数据回填命令：`python manage.py enrich_textbooks_open_data --only-seeded`
 

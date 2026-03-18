@@ -14,6 +14,7 @@
 
 ### 用户端
 - 🔐 用户注册/登录（JWT认证）
+- ✉️ 忘记密码（邮箱重置链接）
 - 📚 教材浏览、模糊搜索
 - 📝 发布教材（买卖/租借/赠送）
 - 🛒 下单交易、订单管理
@@ -24,7 +25,7 @@
 - 👍 教材点赞/点踩
 - 💬 教材评论（支持嵌套回复）
 - 📂 在线资料共享区（上传/下载/管理电子资料）
-- 🧾 在线资料售卖（资料订单、卖家确认后提供支付二维码、支付后下载）
+- 🧾 在线资料售卖（资料订单、卖家确认后上传支付二维码图片、支付后下载）
 
 ### 管理端
 - 📊 数据概览仪表盘
@@ -139,7 +140,7 @@ textbook-sharing/
 
 | 模块 | 端点 | 说明 |
 |------|------|------|
-| 用户 | `/api/users/` | 注册、登录、个人信息 |
+| 用户 | `/api/users/` | 注册、登录、个人信息、忘记密码、重置密码 |
 | 教材 | `/api/textbooks/` | CRUD、搜索、我的教材、点赞点踩、评论 |
 | 资料 | `/api/textbooks/resources/` | 在线资料上传、下载、删除 |
 | 订单 | `/api/orders/` | 下单、确认、完成、取消 |
@@ -161,3 +162,12 @@ textbook-sharing/
 | DB_HOST | db | 数据库主机 |
 | REDIS_HOST | redis | Redis主机 |
 | SECRET_KEY | django-secret-key | Django密钥 |
+| FRONTEND_URL | http://localhost:3000 | 密码重置邮件里的前端链接前缀 |
+| EMAIL_BACKEND | django.core.mail.backends.console.EmailBackend | 邮件后端（开发默认打印到终端） |
+| EMAIL_HOST | smtp.qq.com | SMTP 主机 |
+| EMAIL_PORT | 587 | SMTP 端口 |
+| EMAIL_USE_TLS | 1 | 是否启用 TLS |
+| EMAIL_HOST_USER | (空) | SMTP 用户名（发件邮箱） |
+| EMAIL_HOST_PASSWORD | (空) | SMTP 授权码 |
+| DEFAULT_FROM_EMAIL | noreply@textbook-sharing.local | 默认发件人地址 |
+| PASSWORD_RESET_TIMEOUT | 1800 | 重置链接有效期（秒） |

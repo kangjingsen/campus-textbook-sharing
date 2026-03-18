@@ -171,6 +171,7 @@ class ResourceOrder(models.Model):
     price = models.DecimalField('成交价格', max_digits=10, decimal_places=2, default=0)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     payment_qr = models.CharField('支付二维码链接', max_length=500, blank=True, default='')
+    payment_qr_image = models.ImageField('支付二维码图片', upload_to='payment_qr/', blank=True, null=True)
     payment_proof = models.ImageField('支付凭证', upload_to='payment_proofs/', blank=True, null=True)
     note = models.TextField('备注', blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)

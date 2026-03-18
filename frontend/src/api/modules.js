@@ -4,6 +4,8 @@ import api from './index'
 export const login = (data) => api.post('/users/login/', data)
 export const register = (data) => api.post('/users/register/', data)
 export const refreshToken = (data) => api.post('/users/token/refresh/', data)
+export const forgotPassword = (data) => api.post('/users/forgot-password/', data)
+export const resetPassword = (data) => api.post('/users/reset-password/', data)
 export const getProfile = () => api.get('/users/profile/')
 export const updateProfile = (data) => {
   const formData = new FormData()
@@ -69,7 +71,12 @@ export const downloadResource = (id) => api.post(`/textbooks/resources/${id}/dow
 export const createResourceOrder = (data) => api.post('/textbooks/resources/orders/create/', data)
 export const getResourceOrders = (params) => api.get('/textbooks/resources/orders/', { params })
 export const getResourceOrderDetail = (id) => api.get(`/textbooks/resources/orders/${id}/`)
-export const confirmResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/confirm/`, data)
+export const confirmResourceOrder = (id, data) => {
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData
+  return api.post(`/textbooks/resources/orders/${id}/confirm/`, data, isFormData
+    ? { headers: { 'Content-Type': 'multipart/form-data' } }
+    : undefined)
+}
 export const completeResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/complete/`, data)
 export const sellerCompleteResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/seller-complete/`)
 export const cancelResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/cancel/`)

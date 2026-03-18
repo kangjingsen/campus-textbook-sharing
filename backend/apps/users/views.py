@@ -5,11 +5,17 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 
 from .models import User
 from .serializers import (
     RegisterSerializer, UserSerializer, UserProfileUpdateSerializer,
-    UserAdminSerializer, ChangePasswordSerializer, UserPublicSerializer
+    UserAdminSerializer, ChangePasswordSerializer, UserPublicSerializer,
+    ForgotPasswordRequestSerializer, ResetPasswordSerializer
 )
 from utils.permissions import IsAdmin
 
@@ -60,6 +66,66 @@ class ChangePasswordView(APIView):
         request.user.set_password(serializer.validated_data['new_password'])
         request.user.save()
         return Response({'message': '密码修改成功'})
+
+
+class ForgotPasswordView(APIView):
+    """忘记密码：发送重置链接到邮箱"""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPasswordRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        username = serializer.validated_data['username']
+        email = serializer.validated_data['email']
+
+        user = User.objects.filter(username=username, email=email, is_active=True).first()
+        # 无论用户是否存在，统一返回，避免账号枚举
+        if user:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?uid={uid}&token={token}"
+            send_mail(
+                subject='教材共享平台 - 密码重置',
+                message=(
+                    f"{user.username}，您好！\n\n"
+                    "我们收到了您的密码重置请求。\n"
+                    "请在 30 分钟内点击以下链接重置密码：\n"
+                    f"{reset_url}\n\n"
+                    "如果不是您本人操作，请忽略本邮件。"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+
+        return Response({'message': '如果账号信息匹配，重置邮件已发送，请检查邮箱'})
+
+
+class ResetPasswordView(APIView):
+    """通过 uid + token 重置密码"""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uid = serializer.validated_data['uid']
+        token = serializer.validated_data['token']
+        new_password = serializer.validated_data['new_password']
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id, is_active=True)
+        except Exception:
+            return Response({'error': '重置链接无效或已过期'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({'error': '重置链接无效或已过期'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        return Response({'message': '密码重置成功，请使用新密码登录'})
 
 
 class UserDetailView(generics.RetrieveAPIView):

@@ -17,6 +17,9 @@
           </el-button>
         </el-form-item>
       </el-form>
+      <div class="forgot-link">
+        <router-link to="/forgot-password">忘记密码？</router-link>
+      </div>
       <div class="footer-link">
         还没有账户？<router-link to="/register">立即注册</router-link>
       </div>
@@ -85,6 +88,16 @@ const handleLogin = async () => {
   text-align: center;
   color: #909399;
   margin-bottom: 30px;
+}
+.forgot-link {
+  text-align: right;
+  margin-top: -8px;
+  margin-bottom: 12px;
+}
+.forgot-link a {
+  color: #409eff;
+  text-decoration: none;
+  font-size: 13px;
 }
 .footer-link {
   text-align: center;

@@ -2,7 +2,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Q, F, Count, Sum, Case, When, IntegerField
@@ -399,11 +399,13 @@ class ResourceOrderDetailView(generics.RetrieveAPIView):
 class ResourceOrderConfirmView(APIView):
     """卖家确认资料订单并给出支付二维码"""
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def post(self, request, pk):
         qr = request.data.get('payment_qr', '').strip()
-        if not qr:
-            return Response({'error': '请提供 payment_qr'}, status=status.HTTP_400_BAD_REQUEST)
+        qr_image = request.FILES.get('payment_qr_image')
+        if not qr and not qr_image:
+            return Response({'error': '请提供 payment_qr 或上传 payment_qr_image'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             order = ResourceOrder.objects.get(pk=pk, seller=request.user, status='pending')
@@ -412,9 +414,14 @@ class ResourceOrderConfirmView(APIView):
 
         order.status = 'confirmed'
         order.payment_qr = qr
+        if qr_image:
+            order.payment_qr_image = qr_image
         order.confirmed_at = timezone.now()
-        order.save(update_fields=['status', 'payment_qr', 'confirmed_at', 'updated_at'])
-        return Response({'message': '订单已确认，支付二维码已生成'})
+        update_fields = ['status', 'payment_qr', 'confirmed_at', 'updated_at']
+        if qr_image:
+            update_fields.append('payment_qr_image')
+        order.save(update_fields=update_fields)
+        return Response({'message': '订单已确认，支付二维码已发送'})
 
 
 class ResourceOrderCompleteView(APIView):

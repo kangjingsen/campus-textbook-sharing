@@ -1,7 +1,14 @@
 <template>
   <div class="orders-page">
     <el-card>
-      <template #header><h2>📋 我的订单</h2></template>
+      <template #header>
+        <h2>
+          📋 我的订单
+          <el-tag v-if="orderNotifyCount > 0" type="danger" effect="dark" size="small" style="margin-left: 8px;">
+            待处理 {{ orderNotifyCount }}
+          </el-tag>
+        </h2>
+      </template>
 
       <el-tabs v-model="activeRole" @tab-change="loadOrders">
         <el-tab-pane label="全部" name="all" />
@@ -92,7 +99,13 @@
               size="small"
               type="primary"
               @click="handleConfirmResource(row.id)">
-              确认并给二维码
+              确认并上传二维码
+            </el-button>
+            <el-button
+              v-if="row.buyer === userStore.user?.id && row.status === 'confirmed' && (row.payment_qr_image || row.payment_qr)"
+              size="small"
+              @click="showQr(row.payment_qr_image || row.payment_qr)">
+              查看支付码
             </el-button>
             <el-button
               v-if="row.buyer === userStore.user?.id && row.status === 'confirmed'"
@@ -119,11 +132,18 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <el-dialog v-model="qrVisible" title="支付二维码" width="420px">
+      <div style="text-align: center;">
+        <img v-if="currentQr" :src="currentQr" style="max-width: 100%; max-height: 320px;" />
+        <div v-else>暂无二维码</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrders, confirmOrder, completeOrder, cancelOrder, returnOrder,
@@ -140,6 +160,10 @@ const activeRole = ref('all')
 const statusFilter = ref('')
 const resourceOrders = ref([])
 const resourceLoading = ref(false)
+const orderNotifyCount = ref(0)
+const qrVisible = ref(false)
+const currentQr = ref('')
+let pollTimer = null
 
 const getStatusTag = (s) => ({
   pending: 'warning', confirmed: '', completed: 'success',
@@ -149,7 +173,39 @@ const getStatusTag = (s) => ({
 onMounted(async () => {
   await loadOrders()
   await loadResourceOrders()
+  await loadOrderNotifications()
+  pollTimer = setInterval(() => {
+    loadOrderNotifications()
+  }, 30000)
 })
+
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
+
+const extractCount = (payload) => {
+  if (payload && typeof payload.count === 'number') return payload.count
+  if (Array.isArray(payload)) return payload.length
+  if (payload?.results && Array.isArray(payload.results)) return payload.results.length
+  return 0
+}
+
+const loadOrderNotifications = async () => {
+  try {
+    const [orderRes, resourceRes] = await Promise.all([
+      getOrders({ role: 'seller', status: 'pending', page: 1 }),
+      getResourceOrders({ role: 'seller', status: 'pending' })
+    ])
+    const textbookPending = extractCount(orderRes.data)
+    const resourcePending = extractCount(resourceRes.data)
+    orderNotifyCount.value = textbookPending + resourcePending
+  } catch {
+    orderNotifyCount.value = 0
+  }
+}
 
 const loadOrders = async () => {
   loading.value = true
@@ -162,7 +218,8 @@ const loadOrders = async () => {
   } catch {} finally {
     loading.value = false
   }
-  loadResourceOrders()
+  await loadResourceOrders()
+  loadOrderNotifications()
 }
 
 const handleConfirm = async (id) => {
@@ -205,10 +262,21 @@ const loadResourceOrders = async () => {
 
 const handleConfirmResource = async (id) => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入支付二维码图片链接(URL)', '确认资料订单')
-    await confirmResourceOrder(id, { payment_qr: value })
-    ElMessage.success('已确认并发送二维码')
-    loadResourceOrders()
+    await ElMessageBox.confirm('请选择支付二维码图片后提交。', '确认资料订单')
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async () => {
+      const file = input.files && input.files[0]
+      if (!file) return
+      const formData = new FormData()
+      formData.append('payment_qr_image', file)
+      await confirmResourceOrder(id, formData)
+      ElMessage.success('已确认并发送支付二维码')
+      await loadResourceOrders()
+      loadOrderNotifications()
+    }
+    input.click()
   } catch {}
 }
 
@@ -225,7 +293,8 @@ const handleCompleteResource = async (id) => {
       formData.append('payment_proof', file)
       await completeResourceOrder(id, formData)
       ElMessage.success('凭证已提交，等待卖家确认')
-      loadResourceOrders()
+      await loadResourceOrders()
+      loadOrderNotifications()
     }
     input.click()
   } catch {}
@@ -236,7 +305,8 @@ const handleSellerCompleteResource = async (id) => {
     await ElMessageBox.confirm('确认已收款并完成该资料订单？', '提示')
     await sellerCompleteResourceOrder(id)
     ElMessage.success('订单完成，买家已可下载')
-    loadResourceOrders()
+    await loadResourceOrders()
+    loadOrderNotifications()
   } catch {}
 }
 
@@ -245,8 +315,14 @@ const handleCancelResource = async (id) => {
     await ElMessageBox.confirm('确认取消资料订单？', '提示', { type: 'warning' })
     await cancelResourceOrder(id)
     ElMessage.success('已取消')
-    loadResourceOrders()
+    await loadResourceOrders()
+    loadOrderNotifications()
   } catch {}
+}
+
+const showQr = (qr) => {
+  currentQr.value = qr || ''
+  qrVisible.value = true
 }
 </script>
 

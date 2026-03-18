@@ -8,7 +8,11 @@
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/textbooks">教材列表</el-menu-item>
           <el-menu-item v-if="userStore.isLoggedIn" index="/publish">发布教材</el-menu-item>
-          <el-menu-item v-if="userStore.isLoggedIn" index="/orders">我的订单</el-menu-item>
+          <el-menu-item v-if="userStore.isLoggedIn" index="/orders">
+            <el-badge :value="orderNotifyCount" :hidden="!orderNotifyCount" :max="99" class="order-badge">
+              <span>我的订单</span>
+            </el-badge>
+          </el-menu-item>
           <el-menu-item v-if="userStore.isLoggedIn" index="/wishlist">我的心愿单</el-menu-item>
           <el-menu-item index="/resources">在线资料</el-menu-item>
         </el-menu>
@@ -64,10 +68,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
+import { getOrders, getResourceOrders } from '../api/modules'
 import { Search, ChatDotRound } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -75,20 +80,76 @@ const route = useRoute()
 const userStore = useUserStore()
 const chatStore = useChatStore()
 const searchKeyword = ref('')
+const orderNotifyCount = ref(0)
+let chatTimer = null
+let orderTimer = null
 
 const activeMenu = computed(() => route.path)
 
 onMounted(() => {
   if (userStore.isLoggedIn) {
     chatStore.fetchUnreadCount()
-    // 每30秒检查一次未读
-    setInterval(() => chatStore.fetchUnreadCount(), 30000)
+    loadOrderNotifications()
+    // 每30秒检查一次未读和待处理订单
+    chatTimer = setInterval(() => chatStore.fetchUnreadCount(), 30000)
+    orderTimer = setInterval(() => loadOrderNotifications(), 30000)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (chatTimer) {
+    clearInterval(chatTimer)
+    chatTimer = null
+  }
+  if (orderTimer) {
+    clearInterval(orderTimer)
+    orderTimer = null
   }
 })
 
 watch(() => userStore.isLoggedIn, (val) => {
-  if (val) chatStore.fetchUnreadCount()
+  if (val) {
+    chatStore.fetchUnreadCount()
+    loadOrderNotifications()
+    if (!chatTimer) {
+      chatTimer = setInterval(() => chatStore.fetchUnreadCount(), 30000)
+    }
+    if (!orderTimer) {
+      orderTimer = setInterval(() => loadOrderNotifications(), 30000)
+    }
+  } else {
+    orderNotifyCount.value = 0
+    if (chatTimer) {
+      clearInterval(chatTimer)
+      chatTimer = null
+    }
+    if (orderTimer) {
+      clearInterval(orderTimer)
+      orderTimer = null
+    }
+  }
 })
+
+const extractCount = (payload) => {
+  if (payload && typeof payload.count === 'number') return payload.count
+  if (Array.isArray(payload)) return payload.length
+  if (payload?.results && Array.isArray(payload.results)) return payload.results.length
+  return 0
+}
+
+const loadOrderNotifications = async () => {
+  try {
+    const [orderRes, resourceRes] = await Promise.all([
+      getOrders({ role: 'seller', status: 'pending', page: 1 }),
+      getResourceOrders({ role: 'seller', status: 'pending' })
+    ])
+    const textbookPending = extractCount(orderRes.data)
+    const resourcePending = extractCount(resourceRes.data)
+    orderNotifyCount.value = textbookPending + resourcePending
+  } catch {
+    orderNotifyCount.value = 0
+  }
+}
 
 const handleSearch = () => {
   if (searchKeyword.value.trim()) {
@@ -140,6 +201,7 @@ const handleCommand = (cmd) => {
 }
 .username { font-size: 14px; color: #303133; }
 .msg-badge { margin-right: 4px; }
+.order-badge :deep(.el-badge__content.is-fixed) { top: 12px; }
 .main-content {
   padding: 24px;
   max-width: 1400px;
