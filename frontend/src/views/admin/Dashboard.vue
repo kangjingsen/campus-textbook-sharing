@@ -40,6 +40,8 @@
             <el-table-column label="作者" prop="author" width="120" />
             <el-table-column label="浏览量" prop="view_count" width="100" sortable />
             <el-table-column label="订单数" prop="order_count" width="100" sortable />
+            <el-table-column label="完成单" prop="completed_order_count" width="100" sortable />
+            <el-table-column label="取消单" prop="cancelled_order_count" width="100" sortable />
           </el-table>
         </el-card>
       </el-col>

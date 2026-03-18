@@ -205,12 +205,25 @@ onMounted(async () => {
     const collegeChart = initChart(collegeRef.value)
     const collegeData = Array.isArray(collegeRes.data) ? collegeRes.data : []
     collegeChart.setOption({
-      tooltip: { trigger: 'axis' },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params) => {
+          if (!params?.length) return ''
+          const row = collegeData[params[0].dataIndex] || {}
+          return [
+            row.college || '',
+            `总订单: ${row.order_count || 0}`,
+            `取消订单: ${row.cancelled_count || 0}`,
+            `教材订单: ${row.textbook_order_count || 0}`,
+            `资料订单: ${row.resource_order_count || 0}`
+          ].join('<br/>')
+        }
+      },
       xAxis: { type: 'category', data: collegeData.map(i => i.college), axisLabel: { rotate: 30 } },
       yAxis: { type: 'value' },
       legend: { data: ['总订单', '取消订单'] },
       series: [
-        { name: '总订单', data: collegeData.map(i => i.count), type: 'bar', itemStyle: { color: '#67c23a' } },
+        { name: '总订单', data: collegeData.map(i => i.order_count || 0), type: 'bar', itemStyle: { color: '#67c23a' } },
         { name: '取消订单', data: collegeData.map(i => i.cancelled_count || 0), type: 'bar', itemStyle: { color: '#f56c6c' } }
       ],
       grid: { left: 50, right: 20, top: 20, bottom: 60 }
@@ -376,10 +389,27 @@ const loadRank = async () => {
       rankChartIns.value = initChart(rankRef.value)
     }
     rankChartIns.value.setOption({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          if (!params?.length) return ''
+          const row = data[data.length - 1 - params[0].dataIndex] || {}
+          if (rankType.value !== 'orders') {
+            return `${row.title || ''}<br/>${params[0].seriesName || '数值'}: ${params[0].value || 0}`
+          }
+          return [
+            row.title || '',
+            `订单总数: ${row.order_count || 0}`,
+            `完成订单: ${row.completed_order_count || 0}`,
+            `取消订单: ${row.cancelled_order_count || 0}`
+          ].join('<br/>')
+        }
+      },
       xAxis: { type: 'value' },
       yAxis: { type: 'category', data: data.map(i => i.title).reverse(), axisLabel: { width: 120, overflow: 'truncate' } },
       series: [{
+        name: rankType.value === 'orders' ? '订单数' : (rankType.value === 'views' ? '浏览量' : '综合热度'),
         type: 'bar',
         data: data.map(i => rankType.value === 'orders' ? (i.order_count || 0)
                             : rankType.value === 'views' ? (i.view_count || 0)

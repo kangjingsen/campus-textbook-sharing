@@ -7,6 +7,7 @@ from datetime import timedelta
 from statistics import median
 
 from apps.textbooks.models import Textbook, Category
+from apps.textbooks.models import ResourceOrder
 from apps.orders.models import Order
 from apps.users.models import User
 from apps.recommendations.models import WishlistItem
@@ -22,19 +23,48 @@ class DashboardOverviewView(APIView):
         today = now.date()
         month_start = today.replace(day=1)
 
+        textbook_order_count = Order.objects.count()
+        textbook_completed_orders = Order.objects.filter(status='completed').count()
+        textbook_cancelled_orders = Order.objects.filter(status='cancelled').count()
+        textbook_today_orders = Order.objects.filter(created_at__date=today).count()
+        textbook_month_orders = Order.objects.filter(created_at__date__gte=month_start).count()
+        textbook_revenue = float(Order.objects.filter(
+            status='completed'
+        ).aggregate(total=Sum('price'))['total'] or 0)
+
+        resource_order_count = ResourceOrder.objects.count()
+        resource_completed_orders = ResourceOrder.objects.filter(status='completed').count()
+        resource_cancelled_orders = ResourceOrder.objects.filter(status='cancelled').count()
+        resource_today_orders = ResourceOrder.objects.filter(created_at__date=today).count()
+        resource_month_orders = ResourceOrder.objects.filter(created_at__date__gte=month_start).count()
+        resource_revenue = float(ResourceOrder.objects.filter(
+            status='completed'
+        ).aggregate(total=Sum('price'))['total'] or 0)
+
+        total_order_count = textbook_order_count + resource_order_count
+        total_completed_orders = textbook_completed_orders + resource_completed_orders
+        total_cancelled_orders = textbook_cancelled_orders + resource_cancelled_orders
+        total_today_orders = textbook_today_orders + resource_today_orders
+        total_month_orders = textbook_month_orders + resource_month_orders
+        total_revenue = textbook_revenue + resource_revenue
+
         data = {
             'user_count': User.objects.count(),
             'textbook_count': Textbook.objects.count(),
             'approved_textbooks': Textbook.objects.filter(status='approved').count(),
             'pending_review_count': Textbook.objects.filter(status='pending_review').count(),
-            'order_count': Order.objects.count(),
-            'completed_orders': Order.objects.filter(status='completed').count(),
-            'cancelled_orders': Order.objects.filter(status='cancelled').count(),
-            'today_orders': Order.objects.filter(created_at__date=today).count(),
-            'month_orders': Order.objects.filter(created_at__date__gte=month_start).count(),
-            'total_revenue': float(Order.objects.filter(
-                status='completed'
-            ).aggregate(total=Sum('price'))['total'] or 0),
+            'order_count': total_order_count,
+            'completed_orders': total_completed_orders,
+            'cancelled_orders': total_cancelled_orders,
+            'today_orders': total_today_orders,
+            'month_orders': total_month_orders,
+            'total_revenue': total_revenue,
+            'textbook_order_count': textbook_order_count,
+            'textbook_completed_orders': textbook_completed_orders,
+            'textbook_cancelled_orders': textbook_cancelled_orders,
+            'resource_order_count': resource_order_count,
+            'resource_completed_orders': resource_completed_orders,
+            'resource_cancelled_orders': resource_cancelled_orders,
         }
         data['cancellation_rate'] = round(
             data['cancelled_orders'] / data['order_count'] * 100, 2
@@ -115,16 +145,19 @@ class PopularTextbookRankView(APIView):
         textbooks = Textbook.objects.filter(
             status__in=['approved', 'sold', 'rented', 'completed']
         ).annotate(
-            order_count=Count('orders', filter=Q(orders__status='completed'))
+            total_order_count=Count('orders', filter=Q(orders__status__in=['pending', 'confirmed', 'completed', 'cancelled'])),
+            completed_order_count=Count('orders', filter=Q(orders__status='completed')),
+            cancelled_order_count=Count('orders', filter=Q(orders__status='cancelled'))
         )
 
         if rank_by == 'views':
             textbooks = textbooks.order_by('-view_count')
         elif rank_by == 'orders':
-            textbooks = textbooks.order_by('-order_count')
+            # 按订单数口径：包含取消订单，反映真实需求热度
+            textbooks = textbooks.order_by('-total_order_count', '-completed_order_count', '-view_count')
         else:
             # 综合得分 = view_count * 0.3 + order_count * 0.7 * 100
-            textbooks = textbooks.order_by('-order_count', '-view_count')
+            textbooks = textbooks.order_by('-total_order_count', '-view_count')
 
         result = []
         for tb in textbooks[:limit]:
@@ -134,7 +167,9 @@ class PopularTextbookRankView(APIView):
                 'author': tb.author,
                 'category': tb.category.name if tb.category else '',
                 'view_count': tb.view_count,
-                'order_count': tb.order_count,
+                'order_count': tb.total_order_count,
+                'completed_order_count': tb.completed_order_count,
+                'cancelled_order_count': tb.cancelled_order_count,
                 'price': float(tb.price),
             })
 
@@ -184,23 +219,70 @@ class CollegeDemandView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        college_demand = Order.objects.values(
+        textbook_college_demand = Order.objects.values(
             college=F('buyer__college')
         ).annotate(
             order_count=Count('id'),
             completed_count=Count('id', filter=Q(status='completed')),
             cancelled_count=Count('id', filter=Q(status='cancelled')),
             total_amount=Sum('price', filter=Q(status='completed'))
-        ).order_by('-order_count')
+        )
 
-        result = [{
-            'college': item['college'] or '未知',
-            'count': item['order_count'],
-            'order_count': item['order_count'],
-            'completed_count': item['completed_count'],
-            'cancelled_count': item['cancelled_count'],
-            'total_amount': float(item['total_amount'] or 0)
-        } for item in college_demand]
+        resource_college_demand = ResourceOrder.objects.values(
+            college=F('buyer__college')
+        ).annotate(
+            order_count=Count('id'),
+            completed_count=Count('id', filter=Q(status='completed')),
+            cancelled_count=Count('id', filter=Q(status='cancelled')),
+            total_amount=Sum('price', filter=Q(status='completed'))
+        )
+
+        college_map = {}
+        for item in textbook_college_demand:
+            key = item['college'] or '未知'
+            college_map[key] = {
+                'college': key,
+                'order_count': item['order_count'],
+                'completed_count': item['completed_count'],
+                'cancelled_count': item['cancelled_count'],
+                'total_amount': float(item['total_amount'] or 0),
+                'textbook_order_count': item['order_count'],
+                'resource_order_count': 0,
+            }
+
+        for item in resource_college_demand:
+            key = item['college'] or '未知'
+            if key not in college_map:
+                college_map[key] = {
+                    'college': key,
+                    'order_count': 0,
+                    'completed_count': 0,
+                    'cancelled_count': 0,
+                    'total_amount': 0.0,
+                    'textbook_order_count': 0,
+                    'resource_order_count': 0,
+                }
+
+            college_map[key]['order_count'] += item['order_count']
+            college_map[key]['completed_count'] += item['completed_count']
+            college_map[key]['cancelled_count'] += item['cancelled_count']
+            college_map[key]['total_amount'] += float(item['total_amount'] or 0)
+            college_map[key]['resource_order_count'] += item['order_count']
+
+        college_demand = sorted(college_map.values(), key=lambda x: x['order_count'], reverse=True)
+
+        result = []
+        for item in college_demand:
+            result.append({
+                'college': item['college'],
+                'count': item['order_count'],
+                'order_count': item['order_count'],
+                'completed_count': item['completed_count'],
+                'cancelled_count': item['cancelled_count'],
+                'total_amount': item['total_amount'],
+                'textbook_order_count': item['textbook_order_count'],
+                'resource_order_count': item['resource_order_count'],
+            })
 
         return Response(result)
 
@@ -214,12 +296,17 @@ class TransactionTypeDistView(APIView):
             count=Count('id')
         ).order_by('-count')
 
+        textbook_cancelled_count = Order.objects.filter(status='cancelled').count()
+        resource_cancelled_count = ResourceOrder.objects.filter(status='cancelled').count()
+
         # 前端期望 {sell: N, rent: N, free: N} 格式的对象
         result = {item['transaction_type']: item['count'] for item in type_dist}
         # 确保三种类型都有值
         for t in ('sell', 'rent', 'free'):
             result.setdefault(t, 0)
-        result['cancelled_count'] = Order.objects.filter(status='cancelled').count()
+        result['cancelled_count'] = textbook_cancelled_count + resource_cancelled_count
+        result['textbook_cancelled_count'] = textbook_cancelled_count
+        result['resource_cancelled_count'] = resource_cancelled_count
 
         return Response(result)
 
@@ -461,21 +548,44 @@ class CancellationInsightsView(APIView):
         limit = int(request.query_params.get('limit', 10))
         start_date = timezone.now() - timedelta(days=months * 30)
 
-        monthly_total = Order.objects.filter(
+        textbook_monthly_total = Order.objects.filter(
             created_at__gte=start_date
         ).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(count=Count('id')).order_by('month')
 
-        monthly_cancelled = Order.objects.filter(
+        textbook_monthly_cancelled = Order.objects.filter(
             status='cancelled',
             created_at__gte=start_date
         ).annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(count=Count('id')).order_by('month')
 
-        total_map = {item['month'].strftime('%Y-%m'): item['count'] for item in monthly_total}
-        cancelled_map = {item['month'].strftime('%Y-%m'): item['count'] for item in monthly_cancelled}
+        resource_monthly_total = ResourceOrder.objects.filter(
+            created_at__gte=start_date
+        ).annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(count=Count('id')).order_by('month')
+
+        resource_monthly_cancelled = ResourceOrder.objects.filter(
+            status='cancelled',
+            created_at__gte=start_date
+        ).annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(count=Count('id')).order_by('month')
+
+        textbook_total_map = {item['month'].strftime('%Y-%m'): item['count'] for item in textbook_monthly_total}
+        textbook_cancelled_map = {item['month'].strftime('%Y-%m'): item['count'] for item in textbook_monthly_cancelled}
+        resource_total_map = {item['month'].strftime('%Y-%m'): item['count'] for item in resource_monthly_total}
+        resource_cancelled_map = {item['month'].strftime('%Y-%m'): item['count'] for item in resource_monthly_cancelled}
+
+        total_map = {}
+        cancelled_map = {}
+        for month_key in set(textbook_total_map.keys()) | set(resource_total_map.keys()):
+            total_map[month_key] = textbook_total_map.get(month_key, 0) + resource_total_map.get(month_key, 0)
+        for month_key in set(textbook_cancelled_map.keys()) | set(resource_cancelled_map.keys()):
+            cancelled_map[month_key] = textbook_cancelled_map.get(month_key, 0) + resource_cancelled_map.get(month_key, 0)
+
         month_keys = sorted(set(total_map.keys()) | set(cancelled_map.keys()))
 
         trend = []
@@ -486,36 +596,100 @@ class CancellationInsightsView(APIView):
                 'month': month_key,
                 'total_orders': total_count,
                 'cancelled_orders': cancelled_count,
+                'textbook_total_orders': textbook_total_map.get(month_key, 0),
+                'textbook_cancelled_orders': textbook_cancelled_map.get(month_key, 0),
+                'resource_total_orders': resource_total_map.get(month_key, 0),
+                'resource_cancelled_orders': resource_cancelled_map.get(month_key, 0),
                 'cancel_rate': round(cancelled_count / total_count * 100, 2) if total_count else 0
             })
 
-        by_category = Order.objects.filter(status='cancelled').values(
+        textbook_by_category = Order.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
             category=F('textbook__category__name')
         ).annotate(
             count=Count('id')
-        ).order_by('-count')[:limit]
+        )
 
-        by_seller = Order.objects.filter(status='cancelled').values(
+        resource_by_category = ResourceOrder.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
+            category=F('resource__category__name')
+        ).annotate(
+            count=Count('id')
+        )
+
+        category_map = {}
+        for item in textbook_by_category:
+            key = item['category'] or '未分类'
+            category_map[key] = category_map.get(key, 0) + item['count']
+        for item in resource_by_category:
+            key = item['category'] or '未分类'
+            category_map[key] = category_map.get(key, 0) + item['count']
+
+        by_category = sorted(
+            [{'category': key, 'count': value} for key, value in category_map.items()],
+            key=lambda x: x['count'],
+            reverse=True
+        )[:limit]
+
+        textbook_by_seller = Order.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
             seller_user_id=F('seller__id'),
             seller_name=F('seller__username')
         ).annotate(
             count=Count('id'),
             amount=Sum('price')
-        ).order_by('-count')[:limit]
+        )
+
+        resource_by_seller = ResourceOrder.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
+            seller_user_id=F('seller__id'),
+            seller_name=F('seller__username')
+        ).annotate(
+            count=Count('id'),
+            amount=Sum('price')
+        )
+
+        seller_map = {}
+        for item in textbook_by_seller:
+            sid = item['seller_user_id']
+            seller_map[sid] = {
+                'seller_id': sid,
+                'seller_name': item['seller_name'],
+                'count': item['count'],
+                'amount': float(item['amount'] or 0)
+            }
+        for item in resource_by_seller:
+            sid = item['seller_user_id']
+            if sid not in seller_map:
+                seller_map[sid] = {
+                    'seller_id': sid,
+                    'seller_name': item['seller_name'],
+                    'count': 0,
+                    'amount': 0.0
+                }
+            seller_map[sid]['count'] += item['count']
+            seller_map[sid]['amount'] += float(item['amount'] or 0)
+
+        by_seller = sorted(seller_map.values(), key=lambda x: x['count'], reverse=True)[:limit]
+
+        textbook_cancel_total = Order.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).count()
+        resource_cancel_total = ResourceOrder.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).count()
 
         return Response({
             'trend': trend,
-            'by_category': [
-                {'category': item['category'] or '未分类', 'count': item['count']}
-                for item in by_category
-            ],
-            'by_seller': [
-                {
-                    'seller_id': item['seller_user_id'],
-                    'seller_name': item['seller_name'],
-                    'count': item['count'],
-                    'amount': float(item['amount'] or 0)
-                }
-                for item in by_seller
-            ]
+            'by_category': by_category,
+            'by_seller': by_seller,
+            'summary': {
+                'textbook_cancelled_orders': textbook_cancel_total,
+                'resource_cancelled_orders': resource_cancel_total,
+                'total_cancelled_orders': textbook_cancel_total + resource_cancel_total
+            }
         })
