@@ -77,6 +77,28 @@
                 </el-table-column>
               </el-table>
             </el-tab-pane>
+
+            <el-tab-pane label="我的帖子" name="topics">
+              <el-table :data="myTopics" v-loading="topicsLoading" empty-text="暂无帖子">
+                <el-table-column label="标题" min-width="260">
+                  <template #default="{ row }">
+                    <el-link type="primary" @click="$router.push({ path: '/forum', query: { topic_id: row.id } })">
+                      {{ row.title }}
+                    </el-link>
+                  </template>
+                </el-table-column>
+                <el-table-column label="类型" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="row.topic_type === 'question' ? 'warning' : ''">
+                      {{ row.topic_type === 'question' ? '问答' : '讨论' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="回复" prop="reply_count" width="90" />
+                <el-table-column label="浏览" prop="view_count" width="90" />
+                <el-table-column label="发布时间" prop="created_at" width="180" />
+              </el-table>
+            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -89,7 +111,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { School, Reading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
-import { updateProfile, changePasswordApi, getBrowsingHistory } from '../api/modules'
+import { updateProfile, changePasswordApi, getBrowsingHistory, getForumTopics } from '../api/modules'
 
 const userStore = useUserStore()
 const activeTab = ref('profile')
@@ -97,6 +119,8 @@ const saving = ref(false)
 const changingPwd = ref(false)
 const historyLoading = ref(false)
 const historyList = ref([])
+const topicsLoading = ref(false)
+const myTopics = ref([])
 const pwdFormRef = ref(null)
 
 const roleLabel = computed(() => {
@@ -156,6 +180,18 @@ const loadHistory = async () => {
   } catch {} finally { historyLoading.value = false }
 }
 
+const loadMyTopics = async () => {
+  topicsLoading.value = true
+  try {
+    const res = await getForumTopics({ mine: 1, page_size: 50 })
+    myTopics.value = res.data.results || res.data || []
+  } catch {
+    myTopics.value = []
+  } finally {
+    topicsLoading.value = false
+  }
+}
+
 const beforeAvatarUpload = (file) => {
   const valid = file.type.startsWith('image/')
   if (!valid) ElMessage.error('请选择图片文件')
@@ -174,7 +210,10 @@ const uploadAvatar = async ({ file }) => {
 
 // 切换到浏览记录时自动加载
 import { watch } from 'vue'
-watch(activeTab, (val) => { if (val === 'history') loadHistory() })
+watch(activeTab, (val) => {
+  if (val === 'history') loadHistory()
+  if (val === 'topics') loadMyTopics()
+})
 </script>
 
 <style scoped>

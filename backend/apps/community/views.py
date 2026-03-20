@@ -46,10 +46,19 @@ class ForumTopicListCreateView(generics.ListCreateAPIView):
         qs = ForumTopic.objects.all().annotate(reply_count=Count('replies'))
         topic_type = self.request.query_params.get('topic_type')
         keyword = self.request.query_params.get('q', '').strip()
+        creator_id = self.request.query_params.get('creator')
+        mine = self.request.query_params.get('mine')
         if topic_type:
             qs = qs.filter(topic_type=topic_type)
         if keyword:
             qs = qs.filter(title__icontains=keyword)
+        if creator_id:
+            qs = qs.filter(creator_id=creator_id)
+        if mine in ('1', 'true', 'True'):
+            if self.request.user.is_authenticated:
+                qs = qs.filter(creator=self.request.user)
+            else:
+                qs = qs.none()
         return qs
 
     def perform_create(self, serializer):

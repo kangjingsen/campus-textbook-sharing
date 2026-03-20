@@ -32,10 +32,25 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="creator_name" label="作者" width="120" />
+            <el-table-column label="作者" width="140">
+              <template #default="{ row }">
+                <el-link type="primary" @click.stop="goUserProfile(row.creator)">{{ row.creator_name }}</el-link>
+              </template>
+            </el-table-column>
             <el-table-column prop="reply_count" label="回复" width="90" />
             <el-table-column prop="view_count" label="浏览" width="90" />
             <el-table-column prop="created_at" label="发布时间" width="170" />
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="{ row }">
+                <el-button
+                  v-if="canDeleteTopic(row)"
+                  type="danger"
+                  text
+                  size="small"
+                  @click.stop="handleDeleteTopic(row.id)"
+                >删除</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-col>
@@ -77,7 +92,19 @@
 
     <el-dialog v-model="detailVisible" width="760px" :title="detail?.title || '帖子详情'">
       <div v-if="detail" class="detail-body">
-        <div class="detail-meta">{{ detail.creator_name }} · {{ detail.created_at }}</div>
+        <div class="detail-meta-row">
+          <div class="detail-meta">
+            <el-link type="primary" @click="goUserProfile(detail.creator)">{{ detail.creator_name }}</el-link>
+            <span> · {{ detail.created_at }}</span>
+          </div>
+          <el-button
+            v-if="canDeleteTopic(detail)"
+            type="danger"
+            plain
+            size="small"
+            @click="handleDeleteTopic(detail.id)"
+          >删除帖子</el-button>
+        </div>
         <div class="detail-content">{{ detail.content }}</div>
 
         <div class="reply-header">回复区</div>
@@ -114,11 +141,13 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../stores/user'
 import {
   createForumReply,
   createForumTopic,
+  deleteForumTopic,
   getAnnouncements,
   getForumTopicDetail,
   getForumTopics,
@@ -126,6 +155,8 @@ import {
 } from '../api/modules'
 
 const userStore = useUserStore()
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const creating = ref(false)
 const replying = ref(false)
@@ -216,6 +247,38 @@ const canMarkBest = (reply) => {
   return detail.value.topic_type === 'question' && (userStore.user?.id === detail.value.creator || userStore.isAdmin) && !reply.is_best_answer
 }
 
+const goUserProfile = (userId) => {
+  if (!userId) return
+  router.push(`/user/${userId}`)
+}
+
+const canDeleteTopic = (topic) => {
+  if (!topic || !userStore.isLoggedIn) return false
+  return userStore.isAdmin || userStore.user?.id === topic.creator
+}
+
+const handleDeleteTopic = async (topicId) => {
+  if (!topicId) return
+  try {
+    await ElMessageBox.confirm('确认删除该帖子吗？删除后不可恢复。', '提示', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteForumTopic(topicId)
+    ElMessage.success('帖子已删除')
+    if (detail.value?.id === topicId) {
+      detailVisible.value = false
+      detail.value = null
+    }
+    await loadTopics()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('删除帖子失败', error)
+    }
+  }
+}
+
 const handleMarkBest = async (replyId) => {
   if (!detail.value?.id) return
   await markBestAnswer(detail.value.id, replyId)
@@ -226,6 +289,10 @@ const handleMarkBest = async (replyId) => {
 
 onMounted(async () => {
   await Promise.all([loadTopics(), loadAnnouncements()])
+  const topicId = Number(route.query.topic_id)
+  if (topicId) {
+    await openDetail(topicId)
+  }
 })
 </script>
 
@@ -238,6 +305,7 @@ onMounted(async () => {
 .announcement-item { padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
 .announcement-title { font-weight: 600; margin-bottom: 4px; }
 .announcement-summary { color: #606266; font-size: 13px; }
+.detail-meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .detail-meta { color: #909399; margin-bottom: 8px; }
 .detail-content { white-space: pre-wrap; margin-bottom: 16px; }
 .reply-header { font-weight: 600; margin: 10px 0; }

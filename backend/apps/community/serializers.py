@@ -44,7 +44,7 @@ class ForumTopicSerializer(serializers.ModelSerializer):
 class ForumTopicListSerializer(ForumTopicSerializer):
     class Meta(ForumTopicSerializer.Meta):
         fields = [
-            'id', 'title', 'topic_type', 'creator_name', 'is_pinned', 'is_locked',
+            'id', 'title', 'topic_type', 'creator', 'creator_name', 'is_pinned', 'is_locked',
             'view_count', 'reply_count', 'latest_reply_at', 'created_at'
         ]
 

@@ -163,6 +163,7 @@ export const getAnnouncements = (params) => api.get('/community/announcements/',
 export const getForumTopics = (params) => api.get('/community/forum/topics/', { params })
 export const createForumTopic = (data) => api.post('/community/forum/topics/', data)
 export const getForumTopicDetail = (id) => api.get(`/community/forum/topics/${id}/`)
+export const deleteForumTopic = (id) => api.delete(`/community/forum/topics/${id}/`)
 export const createForumReply = (topicId, data) => api.post(`/community/forum/topics/${topicId}/replies/`, data)
 export const markBestAnswer = (topicId, replyId) => api.post(`/community/forum/topics/${topicId}/best-answer/${replyId}/`)
 
