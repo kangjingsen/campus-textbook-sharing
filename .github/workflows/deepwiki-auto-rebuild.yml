@@ -1,0 +1,71 @@
+name: DeepWiki Auto Rebuild
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-deepwiki:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run DeepWiki rebuild
+        env:
+          DEEPWIKI_REBUILD_CMD: ${{ secrets.DEEPWIKI_REBUILD_CMD }}
+        run: |
+          chmod +x scripts/deepwiki/rebuild.sh
+          scripts/deepwiki/rebuild.sh
+
+      - name: Commit rebuilt DeepWiki artifacts
+        id: commit_changes
+        env:
+          DEEPWIKI_TRACK_PATHS: ${{ vars.DEEPWIKI_TRACK_PATHS }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ -n "${DEEPWIKI_TRACK_PATHS}" ]]; then
+            for p in ${DEEPWIKI_TRACK_PATHS}; do
+              if [[ -e "${p}" ]]; then
+                git add -A "${p}"
+              fi
+            done
+          else
+            git add -A
+          fi
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git commit -m "chore(deepwiki): auto rebuild [skip ci]"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes after rebuild."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebase and push latest DeepWiki changes
+        if: steps.commit_changes.outputs.created == 'true'
+        run: |
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

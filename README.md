@@ -177,3 +177,29 @@ textbook-sharing/
 | EMAIL_HOST_PASSWORD | (空) | SMTP 授权码 |
 | DEFAULT_FROM_EMAIL | noreply@textbook-sharing.local | 默认发件人地址 |
 | PASSWORD_RESET_TIMEOUT | 1800 | 重置链接有效期（秒） |
+
+## DeepWiki 自动重构（提交后自动执行）
+
+已新增 GitHub Actions 工作流：
+- `.github/workflows/deepwiki-auto-rebuild.yml`
+- `scripts/deepwiki/rebuild.sh`
+
+工作机制：
+1. 当代码 push 到 `main` 时自动触发。
+2. 工作流会拉取最新代码（checkout + fetch-depth=0）。
+3. 执行你配置的 DeepWiki 重构命令。
+4. 如有产物变更，自动提交并推送回当前分支。
+
+你需要在 GitHub 仓库中配置：
+1. `Settings -> Secrets and variables -> Actions -> Secrets`
+	- `DEEPWIKI_REBUILD_CMD`
+	- 示例：`npm --prefix frontend run deepwiki:rebuild`
+	- 示例：`python tools/deepwiki/rebuild.py`
+2. 可选 `Settings -> Secrets and variables -> Actions -> Variables`
+	- `DEEPWIKI_TRACK_PATHS`
+	- 示例：`docs wiki .wiki`
+	- 作用：限制自动提交的路径，避免误提交非文档改动。
+
+注意：
+- 若未设置 `DEEPWIKI_REBUILD_CMD`，工作流会失败并提示缺少配置。
+- 自动提交信息包含 `[skip ci]`，可避免无限循环触发。
