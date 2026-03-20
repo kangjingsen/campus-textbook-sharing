@@ -37,7 +37,8 @@ jobs:
           if [[ -z "${DEEPWIKI_REBUILD_CMD:-}" ]]; then
             echo "::error title=Missing Secret::DEEPWIKI_REBUILD_CMD is empty or not configured."
             echo "Please set repository secret DEEPWIKI_REBUILD_CMD."
-            echo "Example: npx -y deepwiki generate --ci"
+            echo "Example: python tools/deepwiki/rebuild.py"
+            echo "Example: echo \"skip deepwiki rebuild\""
             exit 1
           fi
 

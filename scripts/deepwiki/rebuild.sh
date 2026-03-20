@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Required: set this in GitHub Secrets -> DEEPWIKI_REBUILD_CMD
 # Example:
-#   npx -y deepwiki generate --ci
 #   python tools/deepwiki/rebuild.py
+#   echo "skip deepwiki rebuild"
 REBUILD_CMD="${DEEPWIKI_REBUILD_CMD:-}"
 
 if [[ -z "${REBUILD_CMD}" ]]; then

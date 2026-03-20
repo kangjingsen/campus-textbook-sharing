@@ -211,8 +211,8 @@ textbook-sharing/
 你需要在 GitHub 仓库中配置：
 1. `Settings -> Secrets and variables -> Actions -> Secrets`
 	- `DEEPWIKI_REBUILD_CMD`
-	- 示例：`npx -y deepwiki generate --ci`
 	- 示例：`python tools/deepwiki/rebuild.py`
+	- 示例：`echo "skip deepwiki rebuild"`
 2. 可选 `Settings -> Secrets and variables -> Actions -> Variables`
 	- `DEEPWIKI_TRACK_PATHS`
 	- 示例：`docs wiki .wiki`
