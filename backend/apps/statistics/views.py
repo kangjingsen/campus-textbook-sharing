@@ -12,6 +12,7 @@ from apps.textbooks.models import ResourceOrder
 from apps.orders.models import Order
 from apps.users.models import User
 from apps.recommendations.models import WishlistItem
+from apps.statistics.models import SellerRating
 from utils.permissions import IsAdmin
 
 
@@ -756,6 +757,38 @@ class UserInsightsView(APIView):
             })
         demand_rows.sort(key=lambda x: x['demand_score'], reverse=True)
 
+        popular_qs = Textbook.objects.filter(
+            status__in=['approved', 'sold', 'rented', 'completed']
+        ).annotate(
+            total_order_count=Count('orders', filter=Q(orders__status__in=['pending', 'confirmed', 'completed', 'cancelled']))
+        ).order_by('-view_count', '-total_order_count')[:limit]
+        popular_rows = [
+            {
+                'textbook_id': tb.id,
+                'title': tb.title,
+                'author': tb.author,
+                'view_count': int(tb.view_count or 0),
+                'order_count': int(tb.total_order_count or 0),
+            }
+            for tb in popular_qs
+        ]
+
+        seller_rows = []
+        seller_qs = User.objects.filter(role='student').annotate(
+            total_orders=Count('sell_orders'),
+            completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed'))
+        )
+        for s in seller_qs:
+            avg_rating = float(SellerRating.objects.filter(seller=s).aggregate(avg=Avg('score'))['avg'] or 0)
+            completion_rate = (s.completed_orders / s.total_orders * 100) if s.total_orders else 0
+            seller_rows.append({
+                'seller_id': s.id,
+                'seller_name': s.username,
+                'avg_rating': round(avg_rating, 1),
+                'completion_rate': round(completion_rate, 2),
+            })
+        seller_rows.sort(key=lambda x: (x['avg_rating'], x['completion_rate']), reverse=True)
+
         return Response({
             'overview': {
                 'my_total_textbooks': my_textbooks_qs.count(),
@@ -765,5 +798,100 @@ class UserInsightsView(APIView):
                 'my_sales_amount': float(my_completed_orders.aggregate(total=Sum('price'))['total'] or 0),
             },
             'backlog_ranking': backlog_items[:limit],
-            'demand_ranking': demand_rows[:limit]
+            'demand_ranking': demand_rows[:limit],
+            'popular_ranking': popular_rows,
+            'top_sellers_rating': seller_rows[:limit]
+        })
+
+
+class TopSellersRatingView(APIView):
+    """优秀商家评分排行"""
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        limit = int(request.query_params.get('limit', 20))
+        from .models import SellerRating
+        
+        sellers = User.objects.filter(role='student').annotate(
+            total_orders=Count('sell_orders'),
+            completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed')),
+            cancelled_orders=Count('sell_orders', filter=Q(sell_orders__status='cancelled')),
+            sales_amount=Sum('sell_orders__price', filter=Q(sell_orders__status='completed'))
+        )
+
+        result = []
+        for s in sellers:
+            completion_rate = (s.completed_orders / s.total_orders * 100) if s.total_orders else 0
+            
+            # 获取该卖家的评分
+            ratings = SellerRating.objects.filter(seller=s)
+            avg_rating = float(ratings.aggregate(avg=Avg('score'))['avg'] or 0)
+            rating_count = ratings.count()
+            
+            # 综合得分 = 完成率 * 0.3 + 平均评分 * 0.7
+            final_score = completion_rate * 0.3 + avg_rating * 0.7
+            
+            result.append({
+                'seller_id': s.id,
+                'seller_name': s.username,
+                'college': s.college,
+                'total_orders': s.total_orders,
+                'completed_orders': s.completed_orders,
+                'cancelled_orders': s.cancelled_orders,
+                'completion_rate': round(completion_rate, 2),
+                'sales_amount': float(s.sales_amount or 0),
+                'avg_rating': round(avg_rating, 1),
+                'rating_count': rating_count,
+                'final_score': round(final_score, 2)
+            })
+
+        result.sort(key=lambda x: (x['final_score'], x['avg_rating']), reverse=True)
+        return Response(result[:limit])
+
+
+class PopularTextbookDetailView(APIView):
+    """热门教材排行（详细版）"""
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        limit = int(request.query_params.get('limit', 30))
+        rank_type = request.query_params.get('rank_type', 'views')  # views, orders, comprehensive
+        
+        textbooks = Textbook.objects.filter(
+            status__in=['approved', 'sold', 'rented', 'completed']
+        ).annotate(
+            total_order_count=Count('orders', filter=Q(orders__status__in=['pending', 'confirmed', 'completed', 'cancelled'])),
+            completed_order_count=Count('orders', filter=Q(orders__status='completed')),
+            cancelled_order_count=Count('orders', filter=Q(orders__status='cancelled'))
+        )
+
+        if rank_type == 'views':
+            textbooks = textbooks.order_by('-view_count')
+        elif rank_type == 'orders':
+            textbooks = textbooks.order_by('-total_order_count', '-completed_order_count', '-view_count')
+        else:  # comprehensive
+            # 综合得分 = 浏览量 * 0.3 + 订单数 * 0.7
+            textbooks = textbooks.order_by('-total_order_count', '-view_count')
+
+        result = []
+        for idx, tb in enumerate(textbooks[:limit], 1):
+            result.append({
+                'rank': idx,
+                'textbook_id': tb.id,
+                'title': tb.title,
+                'author': tb.author,
+                'category': tb.category.name if tb.category else '',
+                'owner': tb.owner.username if tb.owner else '',
+                'view_count': int(tb.view_count or 0),
+                'order_count': tb.total_order_count,
+                'completed_order_count': tb.completed_order_count,
+                'cancelled_order_count': tb.cancelled_order_count,
+                'price': float(tb.price or 0),
+                'transaction_type': tb.transaction_type,
+                'status': tb.status,
+            })
+
+        return Response({
+            'rank_type': rank_type,
+            'data': result
         })

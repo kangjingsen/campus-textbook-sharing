@@ -142,10 +142,11 @@ import * as echarts from 'echarts'
 import {
   getCirculationRate, getPriceTrend, getCollegeDemand,
   getTransactionTypeDist, getCategoryDistribution,
-  getUserActivity, getPopularTextbookRank,
-  getSalesRanking, getDemandRanking, getTopSellers, getPriceMetrics, getWishlistDemand,
-  getCancellationInsights
+  getUserActivity,
+  getSalesRanking, getDemandRanking, getPriceMetrics, getWishlistDemand,
+  getCancellationInsights, getTopSellersRating, getPopularTextbookDetail
 } from '../../api/modules'
+
 
 const circulationRef = ref(null)
 const priceRef = ref(null)
@@ -196,7 +197,7 @@ onMounted(async () => {
       getCirculationRate(), getPriceTrend(), getCollegeDemand(),
       getTransactionTypeDist(), getCategoryDistribution(), getUserActivity(),
       getSalesRanking({ limit: 12 }), getDemandRanking({ limit: 12 }),
-      getTopSellers({ limit: 12 }), getPriceMetrics({ months: 24 }), getWishlistDemand(),
+      getTopSellersRating({ limit: 12 }), getPriceMetrics({ months: 24 }), getWishlistDemand(),
       getCancellationInsights({ months: 12, limit: 10 })
     ])
 
@@ -334,11 +335,11 @@ onMounted(async () => {
     const topSellerData = Array.isArray(topSellerRes.data) ? topSellerRes.data : []
     topSellerChart.setOption({
       tooltip: { trigger: 'axis' },
-      legend: { data: ['评分', '完成率'] },
+      legend: { data: ['平均评分', '完成率'] },
       xAxis: { type: 'category', data: topSellerData.map(i => i.seller_name), axisLabel: { rotate: 25 } },
       yAxis: [{ type: 'value', name: '评分' }, { type: 'value', name: '完成率(%)' }],
       series: [
-        { name: '评分', type: 'bar', data: topSellerData.map(i => i.score || 0), itemStyle: { color: '#67c23a' } },
+        { name: '平均评分', type: 'bar', data: topSellerData.map(i => i.avg_rating || 0), itemStyle: { color: '#67c23a' } },
         { name: '完成率', type: 'line', yAxisIndex: 1, data: topSellerData.map(i => i.completion_rate || 0), itemStyle: { color: '#409eff' } }
       ],
       grid: { left: 50, right: 50, top: 30, bottom: 70 }
@@ -416,8 +417,8 @@ onMounted(async () => {
 
 const loadRank = async () => {
   try {
-    const res = await getPopularTextbookRank({ type: rankType.value })
-    const data = (res.data.results || res.data || []).slice(0, 15)
+    const res = await getPopularTextbookDetail({ rank_type: rankType.value, limit: 15 })
+    const data = (res.data?.data || []).slice(0, 15)
     if (!rankChartIns.value) {
       rankChartIns.value = initChart(rankRef.value)
     }

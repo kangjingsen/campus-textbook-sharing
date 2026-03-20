@@ -154,6 +154,9 @@ export const getPriceMetrics = (params) => api.get('/statistics/price-metrics/',
 export const getWishlistDemand = () => api.get('/statistics/wishlist-demand/')
 export const getCancellationInsights = (params) => api.get('/statistics/cancellation-insights/', { params })
 export const getUserInsights = (params) => api.get('/statistics/user-insights/', { params })
+export const getTopSellersRating = (params) => api.get('/statistics/top-sellers-rating/', { params })
+export const getPopularTextbookDetail = (params) => api.get('/statistics/popular-detail/', { params })
+
 
 // 社区（公告/论坛）
 export const getAnnouncements = (params) => api.get('/community/announcements/', { params })

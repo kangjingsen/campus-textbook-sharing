@@ -98,9 +98,20 @@ python manage.py seed_textbooks --per-category 10
 # 2) 仅对自动生成教材进行公开数据回填（书名/作者/简介/封面）
 python manage.py enrich_textbooks_open_data --only-seeded
 
-# 3) 查看回填覆盖率
-python manage.py shell -c "from apps.textbooks.models import Textbook; total=Textbook.objects.count(); open_data=Textbook.objects.filter(description__startswith='[OPEN_DATA').count(); seeded=Textbook.objects.filter(description__startswith='[AUTO_SEED]').count(); print('total=', total, 'open_data=', open_data, 'auto_seed=', seeded)"
+# 3) 通过Web爬虫扩展教材库（豆瓣+OpenLibrary+掌阅+番茄等多源）
+python manage.py expand_textbooks_real --multiplier 4        # 4倍扩展（基于当前总量）
+python manage.py expand_textbooks_real --target-total 2000   # 目标达到2000本
+python manage.py expand_textbooks_real --target-total 2000 --owner-username admin --dry-run  # 预览模式
+
+# 4) 查看回填覆盖率
+python manage.py shell -c "from apps.textbooks.models import Textbook; total=Textbook.objects.count(); open_data=Textbook.objects.filter(description__startswith='[OPEN_DATA').count(); seeded=Textbook.objects.filter(description__startswith='[AUTO_SEED]').count(); real_web=Textbook.objects.filter(description__startswith='[REAL_WEB_').count(); print('total=', total, 'open_data=', open_data, 'auto_seed=', seeded, 'real_web=', real_web)"
 ```
+
+**expand_textbooks_real 参数说明:**
+- `--multiplier N`: 基于当前总量的倍数扩展（默认4倍）
+- `--target-total N`: 指定目标总量（优先级高于 multiplier）
+- `--owner-username USERNAME`: 指定新增教材的归属用户，默认admin
+- `--dry-run`: 仅预览无需入库
 
 说明：`start.bat` 默认走系统 `python`，不是工作区 `.venv`。
 
@@ -154,9 +165,14 @@ textbook-sharing/
 | 审核 | `/api/reviews/` | 待审列表、审核操作 |
 | 推荐 | `/api/recommendations/` | 个性化推荐、热门 |
 | 心愿单 | `/api/recommendations/wishlist/` | 心愿单增删改查 |
-| 统计 | `/api/statistics/` | 多维统计数据 |
+| 统计 | `/api/statistics/` | 多维统计数据（含热门教材排行、优秀商家评分排行） |
 | 资料订单 | `/api/textbooks/resources/orders/` | 资料订单创建、确认、支付完成、取消 |
 | WebSocket | `ws://host/ws/chat/<id>/` | 实时聊天 |
+
+统计模块新增端点示例：
+- `/api/statistics/popular-detail/?rank_type=views|orders|comprehensive&limit=15`
+- `/api/statistics/top-sellers-rating/?limit=12`
+- `/api/statistics/user-insights/?limit=10`（用户端含热门教材与优秀商家评分榜）
 
 ## 环境变量
 

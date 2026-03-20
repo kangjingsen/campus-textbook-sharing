@@ -77,7 +77,7 @@ C:\Projects\textbook-sharing\
 - 教材订单：/api/orders/create/, /api/orders/, /api/orders/{id}/confirm|complete|cancel|return/
 - 审核：/api/reviews/pending/, /api/reviews/action/{id}/, /api/reviews/sensitive-words/
 - 心愿单：/api/recommendations/wishlist/, /api/recommendations/wishlist/{id}/
-- 统计增强：/api/statistics/sales-ranking/, /api/statistics/demand-ranking/, /api/statistics/top-sellers/, /api/statistics/price-metrics/, /api/statistics/wishlist-demand/, /api/statistics/cancellation-insights/
+- 统计增强：/api/statistics/sales-ranking/, /api/statistics/demand-ranking/, /api/statistics/top-sellers/, /api/statistics/top-sellers-rating/, /api/statistics/popular-detail/, /api/statistics/price-metrics/, /api/statistics/wishlist-demand/, /api/statistics/cancellation-insights/, /api/statistics/user-insights/
 
 ## 特殊修复记录
 - **统计模块 500 错误修复**: MySQL 时区表为空导致 `TruncMonth`/`TruncDate` 报 `ValueError`，通过设置 `USE_TZ = False` 解决
@@ -106,11 +106,15 @@ C:\Projects\textbook-sharing\
 - **统计增强（仪表盘）**: 新增售卖排行榜、需求排行榜、优秀商家、取消订单专题分析、价格指标（指数/环比/同比/中位数/最大最小/均值）
 - **用户统计接口**: 新增 `/api/statistics/user-insights/` 返回用户个人概览(总教材数/在架数/积压数/成交额)、积压排行(在架天数/浏览量/积压分)、需求排行(心愿数/订单数/需求分)
 - **用户统计页面**: 新页面 `UserStatistics.vue`（路由 `/statistics`），支持勾选显示[概览/积压/需求]、设置查看数量(5-30)
+- **用户统计新增排行**: `UserStatistics.vue` 新增热门教材排行与优秀商家评分排行两个板块
+- **商家评分模型与排行**: 新增 `SellerRating` 模型，新增 `/api/statistics/top-sellers-rating/`，支持小数评分（如 4.1/4.2/4.3）
+- **热门教材详细排行**: 新增 `/api/statistics/popular-detail/`，支持按浏览量/订单数/综合热度排行
 - **管理员统计页面统一筛选**: 后台 `Statistics.vue` 新增统一筛选下拉框，快速跳转到各个统计图表，改善用户体验
 - **教材批量导入导出**: 新增 `TextbookBulkImportView`/`TextbookBulkExportView`，支持 CSV/XLSX 格式；前端集成client-side CSV生成(后端route返回404时自动回退)；我的教材页面集成导入/导出按钮
 - **论坛与公告模块**: 新增 `apps.community`，包含 `Announcement`(标题/摘要/内容/置顶)、`ForumTopic`(讨论/问答/浏览计数)、`ForumReply`(最佳回答标记) 三个模型；新页面 `Forum.vue`(路由 `/forum`)提供完整社区 UI，支持帖子创建/回复/最佳回答标记
 - **首页集成**: 首页新增公告资讯和论坛热帖展示区块，导航栏新增论坛和统计分析入口，心愿单更新时自动刷新推荐列表
 - **后台公告管理**: 新增公告管理端点 `/api/community/announcements/manage/`，管理员可新增/编辑/删除公告和帖子
+- **教材库扩展**: 新增 `expand_textbooks_real` 管理命令，集成多源 Web 爬虫（豆瓣/OpenLibrary/Google Books/掌阅/番茄），支持倍数扩展或目标总量扩展，自动生成交易属性与互动数据（浏览量/评分）
 
 ## 运行补充说明
 - `start.bat` 使用系统默认 `python` 启动后端（不是工作区 `.venv`）。
@@ -118,6 +122,7 @@ C:\Projects\textbook-sharing\
 - 本地默认邮件后端为 console（重置邮件打印到后端终端）；配置 SMTP 环境变量后可真实发信。
 - 教材数据补齐命令：`python manage.py seed_textbooks --per-category 10`
 - 教材公开数据回填命令：`python manage.py enrich_textbooks_open_data --only-seeded`
+- 教材库扩展命令：`python manage.py expand_textbooks_real --target-total 2000 --owner-username admin`（可选 --dry-run 预览）
 
 ## 待完成事项
 - [ ] 论文测试部分（黑盒测试、白盒测试、性能测试、可用性测试）

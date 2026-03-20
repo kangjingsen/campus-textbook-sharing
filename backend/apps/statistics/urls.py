@@ -17,4 +17,6 @@ urlpatterns = [
     path('category-distribution/', views.CategoryDistributionView.as_view(), name='category_distribution'),
     path('wishlist-demand/', views.WishlistDemandView.as_view(), name='wishlist_demand'),
     path('cancellation-insights/', views.CancellationInsightsView.as_view(), name='cancellation_insights'),
+    path('top-sellers-rating/', views.TopSellersRatingView.as_view(), name='top_sellers_rating'),
+    path('popular-detail/', views.PopularTextbookDetailView.as_view(), name='popular_detail'),
 ]

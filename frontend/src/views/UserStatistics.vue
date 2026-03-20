@@ -8,6 +8,8 @@
             <el-checkbox-button label="overview">概览</el-checkbox-button>
             <el-checkbox-button label="backlog">积压排行</el-checkbox-button>
             <el-checkbox-button label="demand">需求排行</el-checkbox-button>
+            <el-checkbox-button label="popular">热门教材</el-checkbox-button>
+            <el-checkbox-button label="sellers">优秀商家</el-checkbox-button>
           </el-checkbox-group>
           <el-input-number v-model="limit" :min="5" :max="30" />
           <el-button type="primary" @click="loadData">应用筛选</el-button>
@@ -48,6 +50,31 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-row :gutter="16" style="margin-top: 16px;">
+      <el-col :span="12" v-if="selectedPanels.includes('popular')">
+        <el-card header="热门教材排行">
+          <el-table :data="popularRows" size="small" stripe>
+            <el-table-column type="index" width="50" />
+            <el-table-column prop="title" label="教材" min-width="180" />
+            <el-table-column prop="author" label="作者" min-width="120" />
+            <el-table-column prop="view_count" label="浏览" width="80" />
+            <el-table-column prop="order_count" label="订单" width="80" />
+          </el-table>
+        </el-card>
+      </el-col>
+
+      <el-col :span="12" v-if="selectedPanels.includes('sellers')">
+        <el-card header="优秀商家评分排行">
+          <el-table :data="sellerRows" size="small" stripe>
+            <el-table-column type="index" width="50" />
+            <el-table-column prop="seller_name" label="商家" min-width="140" />
+            <el-table-column prop="avg_rating" label="评分" width="80" />
+            <el-table-column prop="completion_rate" label="完成率(%)" width="110" />
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -55,11 +82,13 @@
 import { ref, onMounted } from 'vue'
 import { getUserInsights } from '../api/modules'
 
-const selectedPanels = ref(['overview', 'backlog', 'demand'])
+const selectedPanels = ref(['overview', 'backlog', 'demand', 'popular', 'sellers'])
 const limit = ref(10)
 const overview = ref({})
 const backlogRows = ref([])
 const demandRows = ref([])
+const popularRows = ref([])
+const sellerRows = ref([])
 
 const loadData = async () => {
   try {
@@ -67,6 +96,8 @@ const loadData = async () => {
     overview.value = res.data.overview || {}
     backlogRows.value = res.data.backlog_ranking || []
     demandRows.value = res.data.demand_ranking || []
+    popularRows.value = res.data.popular_ranking || []
+    sellerRows.value = res.data.top_sellers_rating || []
   } catch {
     console.warn('数据加载失败')
   }
