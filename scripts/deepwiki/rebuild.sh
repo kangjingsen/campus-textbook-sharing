@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Required: set this in GitHub Secrets -> DEEPWIKI_REBUILD_CMD
 # Example:
-#   npm --prefix frontend run deepwiki:rebuild
+#   npx -y deepwiki generate --ci
 #   python tools/deepwiki/rebuild.py
 REBUILD_CMD="${DEEPWIKI_REBUILD_CMD:-}"
 

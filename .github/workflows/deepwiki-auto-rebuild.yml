@@ -37,7 +37,7 @@ jobs:
           if [[ -z "${DEEPWIKI_REBUILD_CMD:-}" ]]; then
             echo "::error title=Missing Secret::DEEPWIKI_REBUILD_CMD is empty or not configured."
             echo "Please set repository secret DEEPWIKI_REBUILD_CMD."
-            echo "Example: npm --prefix frontend run deepwiki:rebuild"
+            echo "Example: npx -y deepwiki generate --ci"
             exit 1
           fi
 
