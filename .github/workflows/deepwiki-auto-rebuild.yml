@@ -30,12 +30,30 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Validate DeepWiki rebuild config
+        env:
+          DEEPWIKI_REBUILD_CMD: ${{ secrets.DEEPWIKI_REBUILD_CMD }}
+        run: |
+          if [[ -z "${DEEPWIKI_REBUILD_CMD:-}" ]]; then
+            echo "::error title=Missing Secret::DEEPWIKI_REBUILD_CMD is empty or not configured."
+            echo "Please set repository secret DEEPWIKI_REBUILD_CMD."
+            echo "Example: npm --prefix frontend run deepwiki:rebuild"
+            exit 1
+          fi
+
+          echo "DeepWiki rebuild command is configured."
+
       - name: Run DeepWiki rebuild
         env:
           DEEPWIKI_REBUILD_CMD: ${{ secrets.DEEPWIKI_REBUILD_CMD }}
         run: |
           chmod +x scripts/deepwiki/rebuild.sh
           scripts/deepwiki/rebuild.sh
+
+      - name: Print DeepWiki failure hint
+        if: failure()
+        run: |
+          echo "::notice title=DeepWiki Rebuild Failed::Check DEEPWIKI_REBUILD_CMD and dependency availability in rebuild command."
 
       - name: Commit rebuilt DeepWiki artifacts
         id: commit_changes
