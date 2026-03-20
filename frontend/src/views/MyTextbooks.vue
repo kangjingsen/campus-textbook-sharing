@@ -4,7 +4,25 @@
       <template #header>
         <div class="header">
           <h2>📦 我的教材</h2>
-          <el-button type="primary" @click="$router.push('/publish')">发布教材</el-button>
+          <div class="header-actions">
+            <el-upload
+              :show-file-list="false"
+              accept=".xlsx,.csv"
+              :http-request="handleImport"
+            >
+              <el-button>批量导入</el-button>
+            </el-upload>
+            <el-dropdown @command="handleExport">
+              <el-button>批量导出</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="xlsx">导出 Excel</el-dropdown-item>
+                  <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button type="primary" @click="$router.push('/publish')">发布教材</el-button>
+          </div>
         </div>
       </template>
 
@@ -50,7 +68,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getMyTextbooks, deleteTextbook } from '../api/modules'
+import { deleteTextbook, getMyTextbooks, importMyTextbooks } from '../api/modules'
 
 const textbooks = ref([])
 const loading = ref(false)
@@ -83,10 +101,84 @@ const handleDelete = async (id) => {
     loadData()
   } catch {}
 }
+
+const downloadBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+const toCsvCell = (value) => {
+  const text = String(value ?? '')
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`
+  }
+  return text
+}
+
+const handleExport = async (format) => {
+  try {
+    const rows = []
+    let current = 1
+    let hasNext = true
+    while (hasNext) {
+      const res = await getMyTextbooks({ page: current })
+      const data = res.data?.results || res.data || []
+      rows.push(...data)
+      hasNext = Boolean(res.data?.next)
+      current += 1
+      if (!res.data?.results) break
+    }
+
+    const headers = ['id', 'title', 'author', 'isbn', 'publisher', 'edition', 'transaction_type', 'price', 'status', 'created_at']
+    const csvLines = [headers.join(',')]
+    rows.forEach((item) => {
+      csvLines.push([
+        toCsvCell(item.id),
+        toCsvCell(item.title),
+        toCsvCell(item.author),
+        toCsvCell(item.isbn),
+        toCsvCell(item.publisher),
+        toCsvCell(item.edition),
+        toCsvCell(item.transaction_type),
+        toCsvCell(item.price),
+        toCsvCell(item.status),
+        toCsvCell(item.created_at)
+      ].join(','))
+    })
+
+    const blob = new Blob([`\ufeff${csvLines.join('\n')}`], { type: 'text/csv;charset=utf-8' })
+    if (format === 'xlsx') {
+      ElMessage.warning('当前环境将导出为 CSV，可直接用 Excel 打开')
+    }
+    downloadBlob(blob, 'my_textbooks.csv')
+  } catch {
+    ElMessage.error('导出失败，请稍后重试')
+  }
+}
+
+const handleImport = async (uploadRequest) => {
+  try {
+    const file = uploadRequest.file
+    const res = await importMyTextbooks(file)
+    if (uploadRequest.onSuccess) uploadRequest.onSuccess(res)
+    ElMessage.success(`导入完成：成功 ${res.data.created_count} 条，失败 ${res.data.error_count} 条`)
+    await loadData()
+  } catch {
+    if (uploadRequest.onError) uploadRequest.onError(new Error('import failed'))
+    ElMessage.error('导入失败，请检查文件格式')
+  }
+}
 </script>
 
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
 .book-info strong { display: block; }
 .meta { color: #909399; font-size: 12px; margin-top: 4px; }
 .price { color: #f56c6c; font-weight: bold; }

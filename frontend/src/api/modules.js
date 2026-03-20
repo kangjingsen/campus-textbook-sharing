@@ -41,6 +41,17 @@ export const createTextbook = (data) => {
 export const updateTextbook = (id, data) => api.patch(`/textbooks/${id}/edit/`, data)
 export const deleteTextbook = (id) => api.delete(`/textbooks/${id}/delete/`)
 export const getMyTextbooks = (params) => api.get('/textbooks/my/', { params })
+export const exportMyTextbooks = (params) => api.get('/textbooks/my/', {
+  params: { ...(params || {}), export: 1 },
+  responseType: 'blob'
+})
+export const importMyTextbooks = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/textbooks/my/import/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
 export const adminDeleteTextbook = (id) => api.delete(`/textbooks/admin/${id}/delete/`)
 
 // 点赞/点踩
@@ -142,6 +153,15 @@ export const getTopSellers = (params) => api.get('/statistics/top-sellers/', { p
 export const getPriceMetrics = (params) => api.get('/statistics/price-metrics/', { params })
 export const getWishlistDemand = () => api.get('/statistics/wishlist-demand/')
 export const getCancellationInsights = (params) => api.get('/statistics/cancellation-insights/', { params })
+export const getUserInsights = (params) => api.get('/statistics/user-insights/', { params })
+
+// 社区（公告/论坛）
+export const getAnnouncements = (params) => api.get('/community/announcements/', { params })
+export const getForumTopics = (params) => api.get('/community/forum/topics/', { params })
+export const createForumTopic = (data) => api.post('/community/forum/topics/', data)
+export const getForumTopicDetail = (id) => api.get(`/community/forum/topics/${id}/`)
+export const createForumReply = (topicId, data) => api.post(`/community/forum/topics/${topicId}/replies/`, data)
+export const markBestAnswer = (topicId, replyId) => api.post(`/community/forum/topics/${topicId}/best-answer/${replyId}/`)
 
 // 审核 - 别名
 export const getSensitiveWordList = (params) => api.get('/reviews/sensitive-words/', { params })

@@ -1,5 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Avg, Sum, Q, F
 from django.db.models.functions import TruncMonth, TruncWeek, TruncDate
 from django.utils import timezone
@@ -692,4 +693,77 @@ class CancellationInsightsView(APIView):
                 'resource_cancelled_orders': resource_cancel_total,
                 'total_cancelled_orders': textbook_cancel_total + resource_cancel_total
             }
+        })
+
+
+class UserInsightsView(APIView):
+    """用户可见统计：我的概览、积压排行、需求排行快照"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        limit = int(request.query_params.get('limit', 10))
+
+        my_textbooks_qs = Textbook.objects.filter(owner=user)
+        my_active_qs = my_textbooks_qs.filter(status='approved')
+        my_completed_orders = Order.objects.filter(seller=user, status='completed')
+
+        # 积压定义：在架且未完成交易，按在架天数和低浏览优先排序
+        backlog_candidates = my_active_qs.annotate(
+            completed_order_count=Count('orders', filter=Q(orders__status='completed')),
+            pending_order_count=Count('orders', filter=Q(orders__status__in=['pending', 'confirmed']))
+        ).filter(completed_order_count=0)
+
+        backlog_items = []
+        now = timezone.now()
+        for tb in backlog_candidates:
+            days_on_shelf = (now.date() - tb.created_at.date()).days
+            backlog_score = days_on_shelf * 2 + max(0, 30 - int(tb.view_count or 0))
+            backlog_items.append({
+                'textbook_id': tb.id,
+                'title': tb.title,
+                'category': tb.category.name if tb.category else '未分类',
+                'price': float(tb.price or 0),
+                'view_count': int(tb.view_count or 0),
+                'pending_order_count': int(tb.pending_order_count or 0),
+                'days_on_shelf': days_on_shelf,
+                'backlog_score': backlog_score,
+                'suggestion': '建议降价或下架' if days_on_shelf >= 30 else '建议优化标题和描述'
+            })
+
+        backlog_items.sort(key=lambda x: (x['backlog_score'], x['days_on_shelf']), reverse=True)
+
+        # 全站需求榜（用户可见精简版）
+        wish_data = WishlistItem.objects.filter(status='open').values('title').annotate(
+            wishlist_count=Count('id')
+        )
+        wish_map = {i['title']: i['wishlist_count'] for i in wish_data if i['title']}
+
+        order_data = Order.objects.filter(
+            status__in=['pending', 'confirmed', 'completed', 'cancelled']
+        ).values('textbook__title').annotate(order_count=Count('id'))
+        order_map = {i['textbook__title']: i['order_count'] for i in order_data if i['textbook__title']}
+
+        demand_rows = []
+        for title in (set(wish_map.keys()) | set(order_map.keys())):
+            wishlist_count = int(wish_map.get(title, 0))
+            order_count = int(order_map.get(title, 0))
+            demand_rows.append({
+                'title': title,
+                'wishlist_count': wishlist_count,
+                'order_count': order_count,
+                'demand_score': wishlist_count * 2 + order_count
+            })
+        demand_rows.sort(key=lambda x: x['demand_score'], reverse=True)
+
+        return Response({
+            'overview': {
+                'my_total_textbooks': my_textbooks_qs.count(),
+                'my_active_textbooks': my_active_qs.count(),
+                'my_backlog_count': len(backlog_items),
+                'my_completed_orders': my_completed_orders.count(),
+                'my_sales_amount': float(my_completed_orders.aggregate(total=Sum('price'))['total'] or 0),
+            },
+            'backlog_ranking': backlog_items[:limit],
+            'demand_ranking': demand_rows[:limit]
         })

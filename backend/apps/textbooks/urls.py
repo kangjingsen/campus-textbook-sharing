@@ -15,6 +15,8 @@ urlpatterns = [
     path('<int:pk>/edit/', views.TextbookUpdateView.as_view(), name='textbook_edit'),
     path('<int:pk>/delete/', views.TextbookDeleteView.as_view(), name='textbook_delete'),
     path('my/', views.MyTextbookListView.as_view(), name='my_textbooks'),
+    path('my/export/', views.TextbookBulkExportView.as_view(), name='my_textbooks_export'),
+    path('my/import/', views.TextbookBulkImportView.as_view(), name='my_textbooks_import'),
     # 管理员删除
     path('admin/<int:pk>/delete/', views.AdminTextbookDeleteView.as_view(), name='admin_textbook_delete'),
     # 点赞/点踩

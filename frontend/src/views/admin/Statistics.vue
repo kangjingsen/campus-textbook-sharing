@@ -2,12 +2,28 @@
   <div class="statistics-page">
     <h2>统计分析</h2>
 
+    <el-card style="margin-bottom: 16px;">
+      <div class="section-filter">
+        <span>统一筛选：</span>
+        <el-select v-model="activeSection" placeholder="选择要看的统计图/数据" style="width: 260px;">
+          <el-option label="流通率趋势" value="circulation" />
+          <el-option label="价格与学院需求" value="price-college" />
+          <el-option label="需求与售卖排行" value="ranking" />
+          <el-option label="取消率分析" value="cancellation" />
+          <el-option label="价格统计明细" value="price-table" />
+          <el-option label="交易类型与活跃度" value="distribution" />
+          <el-option label="热门教材排行" value="popular" />
+        </el-select>
+        <el-button type="primary" @click="jumpToSection">查看</el-button>
+      </div>
+    </el-card>
+
     <!-- 流通率趋势 -->
-    <el-card header="教材流通率月度趋势" style="margin-bottom: 20px;">
+    <el-card id="section-circulation" header="教材流通率月度趋势" style="margin-bottom: 20px;">
       <div ref="circulationRef" style="height: 350px;"></div>
     </el-card>
 
-    <el-row :gutter="16" style="margin-bottom: 20px;">
+    <el-row id="section-price-college" :gutter="16" style="margin-bottom: 20px;">
       <!-- 价格趋势 -->
       <el-col :span="12">
         <el-card header="各类别平均价格趋势">
@@ -22,7 +38,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" style="margin-bottom: 20px;">
+    <el-row id="section-cancellation" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="24">
         <el-card header="心愿单分类需求占比">
           <div ref="wishlistDemandRef" style="height: 320px;"></div>
@@ -30,7 +46,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" style="margin-bottom: 20px;">
+    <el-row id="section-ranking" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="8">
         <el-card header="取消率趋势">
           <div ref="cancelTrendRef" style="height: 300px;"></div>
@@ -74,7 +90,7 @@
       </el-col>
     </el-row>
 
-    <el-card header="价格统计明细（均值/中位数/最小/最大/同比）" style="margin-bottom: 20px;">
+    <el-card id="section-price-table" header="价格统计明细（均值/中位数/最小/最大/同比）" style="margin-bottom: 20px;">
       <el-table :data="priceMetricRows" size="small" stripe>
         <el-table-column prop="month" label="月份" width="110" />
         <el-table-column prop="avg_price" label="均价" width="90" />
@@ -87,7 +103,7 @@
       </el-table>
     </el-card>
 
-    <el-row :gutter="16" style="margin-bottom: 20px;">
+    <el-row id="section-distribution" :gutter="16" style="margin-bottom: 20px;">
       <!-- 交易类型分布 -->
       <el-col :span="8">
         <el-card header="交易类型占比">
@@ -109,7 +125,7 @@
     </el-row>
 
     <!-- 热门排行 -->
-    <el-card header="热门教材排行">
+    <el-card id="section-popular" header="热门教材排行">
       <el-radio-group v-model="rankType" style="margin-bottom: 12px;" @change="loadRank">
         <el-radio-button value="views">按浏览量</el-radio-button>
         <el-radio-button value="orders">按订单数</el-radio-button>
@@ -149,7 +165,24 @@ const cancelSellerRef = ref(null)
 const priceMetricRows = ref([])
 const rankChartIns = ref(null)
 const rankType = ref('views')
+const activeSection = ref('circulation')
 const charts = []
+
+const jumpToSection = () => {
+  const mapping = {
+    circulation: 'section-circulation',
+    'price-college': 'section-price-college',
+    ranking: 'section-ranking',
+    cancellation: 'section-cancellation',
+    'price-table': 'section-price-table',
+    distribution: 'section-distribution',
+    popular: 'section-popular'
+  }
+  const target = document.getElementById(mapping[activeSection.value])
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
 
 const initChart = (domRef) => {
   const chart = echarts.init(domRef)
@@ -431,4 +464,5 @@ onUnmounted(() => {
 
 <style scoped>
 .statistics-page h2 { margin-bottom: 20px; }
+.section-filter { display: flex; align-items: center; gap: 10px; }
 </style>

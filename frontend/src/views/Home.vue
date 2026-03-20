@@ -95,14 +95,37 @@
         </el-col>
       </el-row>
     </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h2>📢 公告资讯</h2>
+        <router-link to="/forum">进入论坛 →</router-link>
+      </div>
+      <el-row :gutter="16">
+        <el-col :xs="24" :md="12">
+          <el-card class="info-card" v-for="item in announcements" :key="item.id" style="margin-bottom: 12px;">
+            <h4>{{ item.title }}</h4>
+            <p class="info-text">{{ item.summary || item.content }}</p>
+          </el-card>
+          <el-empty v-if="!announcements.length" description="暂无公告" />
+        </el-col>
+        <el-col :xs="24" :md="12">
+          <el-card class="info-card" v-for="topic in forumTopics" :key="topic.id" style="margin-bottom: 12px; cursor: pointer;" @click="$router.push('/forum')">
+            <h4>{{ topic.title }}</h4>
+            <p class="info-text">{{ topic.creator_name }} · 回复 {{ topic.reply_count || 0 }} · 浏览 {{ topic.view_count || 0 }}</p>
+          </el-card>
+          <el-empty v-if="!forumTopics.length" description="暂无帖子" />
+        </el-col>
+      </el-row>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
-import { getRecommendations, getPopularTextbooks, getWishlist } from '../api/modules'
+import { getAnnouncements, getForumTopics, getRecommendations, getPopularTextbooks, getWishlist } from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
@@ -111,13 +134,15 @@ const searchKeyword = ref('')
 const recommendations = ref([])
 const popular = ref([])
 const wishlistTop = ref([])
+const announcements = ref([])
+const forumTopics = ref([])
 
 const getTypeTag = (type) => ({ sell: '', rent: 'warning', free: 'success' }[type] || '')
 const getTypeLabel = (type) => ({ sell: '出售', rent: '租赁', free: '免费' }[type] || '')
 const statusText = (s) => ({ open: '待满足', matched: '已匹配', closed: '已关闭' }[s] || s)
 const statusType = (s) => ({ open: 'warning', matched: 'success', closed: 'info' }[s] || '')
 
-onMounted(async () => {
+const loadPersonalizedSection = async () => {
   try {
     if (userStore.isLoggedIn) {
       const res = await getRecommendations({ limit: 8 })
@@ -127,10 +152,28 @@ onMounted(async () => {
       wishlistTop.value = wishList.slice(0, 3)
     }
   } catch {}
+}
+
+onMounted(async () => {
+  await loadPersonalizedSection()
   try {
     const res = await getPopularTextbooks()
     popular.value = (res.data.results || res.data).slice(0, 8)
   } catch {}
+  try {
+    const [aRes, fRes] = await Promise.all([
+      getAnnouncements({ page_size: 4 }),
+      getForumTopics({ page_size: 4 })
+    ])
+    announcements.value = aRes.data.results || aRes.data || []
+    forumTopics.value = fRes.data.results || fRes.data || []
+  } catch {}
+
+  window.addEventListener('wishlist-updated', loadPersonalizedSection)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('wishlist-updated', loadPersonalizedSection)
 })
 
 const handleSearch = () => {
@@ -197,4 +240,6 @@ const handleWishSearch = (title) => {
 .wish-top h4 { margin:0; font-size: 15px; }
 .wish-meta { color:#606266; margin: 4px 0; font-size: 13px; }
 .wish-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+.info-card h4 { margin: 0 0 6px; font-size: 15px; }
+.info-text { margin: 0; color: #606266; font-size: 13px; }
 </style>

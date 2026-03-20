@@ -160,6 +160,7 @@ const submit = async () => {
       await createWishlistItem(payload)
       ElMessage.success('已添加')
     }
+    window.dispatchEvent(new Event('wishlist-updated'))
     dialogVisible.value = false
     await loadData()
   } catch {
@@ -172,6 +173,7 @@ const markMatched = async (row) => {
   try {
     await updateWishlistItem(row.id, { status: 'matched' })
     ElMessage.success('已标记为匹配')
+    window.dispatchEvent(new Event('wishlist-updated'))
     await loadData()
   } catch {}
 }
@@ -181,6 +183,7 @@ const deleteItem = async (id) => {
     await ElMessageBox.confirm('确定删除该心愿吗？', '提示', { type: 'warning' })
     await deleteWishlistItem(id)
     ElMessage.success('已删除')
+    window.dispatchEvent(new Event('wishlist-updated'))
     await loadData()
   } catch {}
 }

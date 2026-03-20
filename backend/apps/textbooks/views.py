@@ -16,6 +16,11 @@ from .serializers import (
 )
 from utils.permissions import IsOwnerOrAdmin, IsAdmin
 from django.utils import timezone
+from django.http import HttpResponse
+from django.core.exceptions import ObjectDoesNotExist
+from decimal import Decimal, InvalidOperation
+import csv
+import io
 
 
 class CategoryTreeView(generics.ListAPIView):
@@ -155,6 +160,224 @@ class MyTextbookListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Textbook.objects.filter(owner=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        export_flag = str(request.query_params.get('export', '')).lower()
+        if export_flag in ('1', 'true', 'yes'):
+            export_view = TextbookBulkExportView()
+            export_view.request = request
+            return export_view.get(request)
+        return super().list(request, *args, **kwargs)
+
+
+class TextbookBulkExportView(APIView):
+    """批量导出我的教材（csv/xlsx）"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not getattr(request.user, 'is_authenticated', False):
+            return Response({'detail': '未登录'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        export_format = request.query_params.get('format', 'xlsx').lower()
+        queryset = Textbook.objects.filter(owner=request.user).order_by('-created_at')
+
+        headers = [
+            'id', 'title', 'author', 'isbn', 'publisher', 'edition',
+            'condition', 'description', 'price', 'original_price',
+            'transaction_type', 'rent_duration', 'category_id', 'category_name',
+            'status', 'created_at'
+        ]
+        rows = []
+        for tb in queryset:
+            try:
+                category_name = tb.category.name if tb.category else ''
+            except ObjectDoesNotExist:
+                category_name = ''
+
+            rows.append([
+                tb.id,
+                tb.title,
+                tb.author,
+                tb.isbn,
+                tb.publisher,
+                tb.edition,
+                tb.condition,
+                tb.description,
+                float(tb.price or 0),
+                float(tb.original_price or 0) if tb.original_price is not None else '',
+                tb.transaction_type,
+                tb.rent_duration or '',
+                tb.category_id or '',
+                category_name,
+                tb.status,
+                tb.created_at.strftime('%Y-%m-%d %H:%M:%S') if tb.created_at else ''
+            ])
+
+        if export_format == 'csv':
+            response = HttpResponse(content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = 'attachment; filename="my_textbooks.csv"'
+            response.write('\ufeff')
+            writer = csv.writer(response)
+            writer.writerow(headers)
+            writer.writerows(rows)
+            return response
+
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            return Response({'error': '当前环境缺少 openpyxl，暂不支持 xlsx 导出，请改用 format=csv'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'textbooks'
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="my_textbooks.xlsx"'
+        return response
+
+
+class TextbookBulkImportView(APIView):
+    """批量导入教材（csv/xlsx）"""
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        upload = request.FILES.get('file')
+        if not upload:
+            return Response({'error': '请上传文件 file'}, status=status.HTTP_400_BAD_REQUEST)
+
+        filename = (upload.name or '').lower()
+        try:
+            if filename.endswith('.csv'):
+                rows = self._read_csv(upload)
+            elif filename.endswith('.xlsx'):
+                rows = self._read_xlsx(upload)
+            else:
+                return Response({'error': '仅支持 .csv 或 .xlsx 文件'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': f'读取文件失败: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        created_count = 0
+        errors = []
+        for idx, row in enumerate(rows, start=2):
+            try:
+                payload = self._normalize_row(row)
+                if not payload.get('title') or not payload.get('author'):
+                    raise ValueError('title 和 author 为必填项')
+
+                Textbook.objects.create(
+                    title=payload['title'],
+                    author=payload['author'],
+                    isbn=payload.get('isbn', ''),
+                    publisher=payload.get('publisher', ''),
+                    edition=payload.get('edition', ''),
+                    condition=payload.get('condition', 4),
+                    description=payload.get('description', ''),
+                    price=payload.get('price', Decimal('0')),
+                    original_price=payload.get('original_price'),
+                    transaction_type=payload.get('transaction_type', 'sell'),
+                    rent_duration=payload.get('rent_duration'),
+                    category=payload.get('category_obj'),
+                    owner=request.user,
+                    status='pending_review'
+                )
+                created_count += 1
+            except Exception as exc:
+                errors.append({'row': idx, 'error': str(exc)})
+
+        return Response({
+            'message': '导入完成',
+            'created_count': created_count,
+            'error_count': len(errors),
+            'errors': errors[:50]
+        })
+
+    def _read_csv(self, upload):
+        content = upload.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(content))
+        return list(reader)
+
+    def _read_xlsx(self, upload):
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            raise ValueError('当前环境缺少 openpyxl，暂不支持 xlsx 导入，请改用 csv')
+
+        wb = load_workbook(upload, read_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return []
+        headers = [str(h).strip() if h is not None else '' for h in rows[0]]
+        result = []
+        for row in rows[1:]:
+            result.append({headers[i]: row[i] if i < len(row) else '' for i in range(len(headers))})
+        return result
+
+    def _normalize_row(self, row):
+        payload = {
+            'title': str(row.get('title', '') or '').strip(),
+            'author': str(row.get('author', '') or '').strip(),
+            'isbn': str(row.get('isbn', '') or '').strip(),
+            'publisher': str(row.get('publisher', '') or '').strip(),
+            'edition': str(row.get('edition', '') or '').strip(),
+            'description': str(row.get('description', '') or '').strip(),
+        }
+
+        condition = row.get('condition', 4)
+        try:
+            payload['condition'] = int(condition) if condition not in (None, '') else 4
+        except Exception:
+            payload['condition'] = 4
+
+        transaction_type = str(row.get('transaction_type', 'sell') or 'sell').strip()
+        if transaction_type not in ('sell', 'rent', 'free'):
+            transaction_type = 'sell'
+        payload['transaction_type'] = transaction_type
+
+        price = row.get('price', 0)
+        try:
+            payload['price'] = Decimal(str(price or 0))
+        except (InvalidOperation, ValueError):
+            payload['price'] = Decimal('0')
+
+        original_price = row.get('original_price')
+        if original_price in (None, ''):
+            payload['original_price'] = None
+        else:
+            try:
+                payload['original_price'] = Decimal(str(original_price))
+            except (InvalidOperation, ValueError):
+                payload['original_price'] = None
+
+        rent_duration = row.get('rent_duration')
+        if rent_duration in (None, ''):
+            payload['rent_duration'] = None
+        else:
+            payload['rent_duration'] = int(rent_duration)
+
+        category_obj = None
+        category_id = row.get('category_id')
+        category_name = str(row.get('category_name', '') or '').strip()
+        if category_id not in (None, ''):
+            category_obj = Category.objects.filter(id=int(category_id), is_active=True).first()
+        elif category_name:
+            category_obj = Category.objects.filter(name=category_name, is_active=True).first()
+        payload['category_obj'] = category_obj
+
+        if payload['transaction_type'] == 'free':
+            payload['price'] = Decimal('0')
+
+        return payload
 
 
 # ============= 管理员删除 =============

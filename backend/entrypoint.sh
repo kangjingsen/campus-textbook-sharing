@@ -14,7 +14,7 @@ done
 echo "Redis is ready!"
 
 echo "Running migrations..."
-python manage.py makemigrations users textbooks orders messaging reviews statistics recommendations --noinput
+python manage.py makemigrations users textbooks orders messaging reviews statistics recommendations community --noinput
 python manage.py migrate --noinput
 
 echo "Collecting static files..."

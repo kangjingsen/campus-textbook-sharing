@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.reviews',
     'apps.statistics',
     'apps.recommendations',
+    'apps.community',
 ]
 
 MIDDLEWARE = [
