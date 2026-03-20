@@ -75,6 +75,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createWishlistItem, deleteWishlistItem, getCategoryFlat, getWishlist, updateWishlistItem } from '../api/modules'
+import { useAppStore } from '../stores/app'
+
+const appStore = useAppStore()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -161,6 +164,7 @@ const submit = async () => {
       ElMessage.success('已添加')
     }
     window.dispatchEvent(new Event('wishlist-updated'))
+    appStore.notifyWishlistUpdate()
     dialogVisible.value = false
     await loadData()
   } catch {
@@ -174,6 +178,7 @@ const markMatched = async (row) => {
     await updateWishlistItem(row.id, { status: 'matched' })
     ElMessage.success('已标记为匹配')
     window.dispatchEvent(new Event('wishlist-updated'))
+    appStore.notifyWishlistUpdate()
     await loadData()
   } catch {}
 }
@@ -184,6 +189,7 @@ const deleteItem = async (id) => {
     await deleteWishlistItem(id)
     ElMessage.success('已删除')
     window.dispatchEvent(new Event('wishlist-updated'))
+    appStore.notifyWishlistUpdate()
     await loadData()
   } catch {}
 }

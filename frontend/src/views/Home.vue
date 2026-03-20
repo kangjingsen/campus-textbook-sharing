@@ -122,14 +122,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { getAnnouncements, getForumTopics, getRecommendations, getPopularTextbooks, getWishlist } from '../api/modules'
 import { useUserStore } from '../stores/user'
+import { useAppStore } from '../stores/app'
 
 const router = useRouter()
 const userStore = useUserStore()
+const appStore = useAppStore()
 const searchKeyword = ref('')
 const recommendations = ref([])
 const popular = ref([])
@@ -170,6 +172,12 @@ onMounted(async () => {
   } catch {}
 
   window.addEventListener('wishlist-updated', loadPersonalizedSection)
+})
+
+watchEffect(() => {
+  if (appStore.wishlistUpdateTime > 0) {
+    loadPersonalizedSection()
+  }
 })
 
 onUnmounted(() => {

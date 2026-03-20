@@ -11,7 +11,7 @@ from django.db.models import Count
 from apps.users.models import User
 from apps.textbooks.models import Textbook
 from apps.orders.models import Order
-from .models import BrowsingHistory
+from .models import BrowsingHistory, WishlistItem
 
 
 def build_interaction_matrix():
@@ -61,6 +61,22 @@ def build_interaction_matrix():
         t = textbook_idx.get(order['textbook_id'])
         if u is not None and t is not None:
             matrix[u][t] = 5
+
+    # 心愿单 -> 2分（表示强烈的需求信号）
+    for wish in WishlistItem.objects.filter(
+        user_id__in=users, status='open',
+        category__textbooks__isnull=False
+    ).select_related('category').prefetch_related('category__textbooks'):
+        u = user_idx.get(wish.user_id)
+        if u is not None and wish.category:
+            for textbook in wish.category.textbooks.filter(
+                id__in=textbooks, status__in=['approved', 'sold', 'rented', 'completed']
+            ):
+                t = textbook_idx.get(textbook.id)
+                if t is not None:
+                    # 心愿单优先级权重 * 2
+                    weight = min(wish.priority, 5) * 2 * 0.4  # 优先级权重
+                    matrix[u][t] = max(matrix[u][t], weight)
 
     return matrix, users, textbooks
 
