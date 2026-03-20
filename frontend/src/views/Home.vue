@@ -144,10 +144,11 @@ const getTypeLabel = (type) => ({ sell: '出售', rent: '租赁', free: '免费'
 const statusText = (s) => ({ open: '待满足', matched: '已匹配', closed: '已关闭' }[s] || s)
 const statusType = (s) => ({ open: 'warning', matched: 'success', closed: 'info' }[s] || '')
 
-const loadPersonalizedSection = async () => {
+const loadPersonalizedSection = async (options = {}) => {
+  const forceRefresh = Boolean(options.forceRefresh)
   try {
     if (userStore.isLoggedIn) {
-      const res = await getRecommendations({ limit: 8 })
+      const res = await getRecommendations({ limit: 8, ...(forceRefresh ? { refresh: 1 } : {}) })
       recommendations.value = res.data.recommendations || []
       const wishRes = await getWishlist({ status: 'open' })
       const wishList = wishRes.data.results || wishRes.data || []
@@ -176,7 +177,7 @@ onMounted(async () => {
 
 watchEffect(() => {
   if (appStore.wishlistUpdateTime > 0) {
-    loadPersonalizedSection()
+    loadPersonalizedSection({ forceRefresh: true })
   }
 })
 

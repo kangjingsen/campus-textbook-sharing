@@ -15,15 +15,16 @@ class RecommendationListView(APIView):
     def get(self, request):
         user = request.user
         top_k = int(request.query_params.get('limit', 10))
+        refresh = str(request.query_params.get('refresh', '')).lower() in ('1', 'true', 'yes')
 
-        # 先尝试从缓存获取
+        # 先尝试从缓存获取（可通过 refresh 强制实时重算）
         cached = RecommendationCache.objects.filter(user=user)[:top_k]
 
-        if cached.exists():
+        if cached.exists() and not refresh:
             serializer = RecommendationSerializer(cached, many=True)
             return Response({'recommendations': serializer.data, 'source': 'cache'})
 
-        # 无缓存时实时计算
+        # 无缓存或强制刷新时实时计算
         update_user_recommendations(user.id, top_k=top_k)
         cached = RecommendationCache.objects.filter(user=user)[:top_k]
 
@@ -32,7 +33,7 @@ class RecommendationListView(APIView):
             return Response({'recommendations': serializer.data, 'source': 'realtime'})
 
         # 冷启动：返回热门教材
-        popular = Textbook.objects.filter(status='approved').order_by('-view_count')[:top_k]
+        popular = Textbook.objects.filter(status='approved').exclude(owner=user).order_by('-view_count')[:top_k]
         serializer = TextbookListSerializer(popular, many=True)
         return Response({'recommendations': serializer.data, 'source': 'popular'})
 

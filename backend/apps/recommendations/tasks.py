@@ -26,6 +26,10 @@ def update_recommendations():
 
 def update_user_recommendations(user_id, top_k=20):
     """更新单个用户的推荐"""
+    allowed_ids = set(
+        Textbook.objects.filter(status='approved').exclude(owner_id=user_id).values_list('id', flat=True)
+    )
+
     cf_recs = get_collaborative_recommendations(user_id, top_k=top_k)
     cb_recs = get_content_recommendations(user_id, top_k=top_k)
 
@@ -34,6 +38,8 @@ def update_user_recommendations(user_id, top_k=20):
 
     for rec in cf_recs:
         tid = rec['textbook_id']
+        if tid not in allowed_ids:
+            continue
         merged[tid] = {
             'score': rec['score'] * 0.6,
             'reason': rec['reason']
@@ -41,6 +47,8 @@ def update_user_recommendations(user_id, top_k=20):
 
     for rec in cb_recs:
         tid = rec['textbook_id']
+        if tid not in allowed_ids:
+            continue
         if tid in merged:
             merged[tid]['score'] += rec['score'] * 0.4
             merged[tid]['reason'] = '综合推荐'
