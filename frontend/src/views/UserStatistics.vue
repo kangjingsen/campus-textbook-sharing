@@ -68,7 +68,11 @@
         <el-card header="优秀商家评分排行">
           <el-table :data="sellerRows" size="small" stripe>
             <el-table-column type="index" width="50" />
-            <el-table-column prop="seller_name" label="商家" min-width="140" />
+            <el-table-column label="商家" min-width="140">
+              <template #default="{ row }">
+                <el-link type="primary" @click="goUserProfile(row.seller_id)">{{ row.seller_name }}</el-link>
+              </template>
+            </el-table-column>
             <el-table-column prop="avg_rating" label="评分" width="80" />
             <el-table-column prop="completion_rate" label="完成率(%)" width="110" />
           </el-table>
@@ -80,6 +84,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getUserInsights } from '../api/modules'
 
 const selectedPanels = ref(['overview', 'backlog', 'demand', 'popular', 'sellers'])
@@ -89,6 +94,7 @@ const backlogRows = ref([])
 const demandRows = ref([])
 const popularRows = ref([])
 const sellerRows = ref([])
+const router = useRouter()
 
 const loadData = async () => {
   try {
@@ -101,6 +107,11 @@ const loadData = async () => {
   } catch {
     console.warn('数据加载失败')
   }
+}
+
+const goUserProfile = (sellerId) => {
+  if (!sellerId) return
+  router.push(`/user/${sellerId}`)
 }
 
 onMounted(loadData)

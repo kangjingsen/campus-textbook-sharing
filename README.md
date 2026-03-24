@@ -107,6 +107,22 @@ python manage.py expand_textbooks_real --target-total 2000 --owner-username admi
 
 # 4) 查看回填覆盖率
 python manage.py shell -c "from apps.textbooks.models import Textbook; total=Textbook.objects.count(); open_data=Textbook.objects.filter(description__startswith='[OPEN_DATA').count(); seeded=Textbook.objects.filter(description__startswith='[AUTO_SEED]').count(); real_web=Textbook.objects.filter(description__startswith='[REAL_WEB_').count(); print('total=', total, 'open_data=', open_data, 'auto_seed=', seeded, 'real_web=', real_web)"
+
+# 5) 统计演示订单补数（跨月 completed/cancelled）
+python manage.py seed_stats_orders
+
+# 6) 对 REAL_WEB 扩容数据执行分类纠偏（先预览后写入）
+python manage.py reclassify_textbooks --scope real-web --dry-run
+python manage.py reclassify_textbooks --scope real-web
+
+# 7) 对 REAL_WEB 扩容数据做中文元数据+真实封面补齐（仅使用公开网站真实数据）
+python manage.py localize_real_textbooks --scope real-web --limit 100 --dry-run
+python manage.py localize_real_textbooks --scope real-web --limit 300 --sleep-ms 80
+
+# 8) 从公开网站新增中文书（真实封面），并按四个用户轮转分配
+python manage.py seed_real_cn_books --count 500 --owners admin,test_user,wenchang,alice --sleep-ms 20
+# 若遇外部限流，可开启 broaden 词池重试
+python manage.py seed_real_cn_books --count 100 --owners admin,test_user,wenchang,alice --broaden --sleep-ms 20
 ```
 
 **expand_textbooks_real 参数说明:**
@@ -116,6 +132,10 @@ python manage.py shell -c "from apps.textbooks.models import Textbook; total=Tex
 - `--dry-run`: 仅预览无需入库
 
 说明：`start.bat` 默认走系统 `python`，不是工作区 `.venv`。
+
+补充说明：
+- `localize_real_textbooks` 与 `seed_real_cn_books` 都只使用真实网站返回的封面图片，不会生成虚假封面。
+- 公开站点存在限流（例如 418），建议分批多次执行并设置 `--sleep-ms`。
 
 ## 项目结构
 

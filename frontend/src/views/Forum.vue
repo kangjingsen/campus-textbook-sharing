@@ -58,11 +58,25 @@
       <el-col :span="8">
         <el-card>
           <template #header>
-            <div class="list-header">公告资讯</div>
+            <div class="announcement-header-row">
+              <span class="list-header">公告资讯</span>
+              <el-button v-if="userStore.isAdmin" type="primary" size="small" @click="openAnnouncementDialog()">发布公告</el-button>
+            </div>
           </template>
           <div v-for="item in announcements" :key="item.id" class="announcement-item">
-            <div class="announcement-title">{{ item.title }}</div>
+            <div class="announcement-title-row">
+              <div class="announcement-title">
+                {{ item.title }}
+                <el-tag v-if="item.is_pinned" type="danger" size="small">置顶</el-tag>
+                <el-tag v-if="!item.is_active" type="info" size="small">已停用</el-tag>
+              </div>
+              <div v-if="userStore.isAdmin" class="announcement-actions">
+                <el-button text type="primary" size="small" @click="openAnnouncementDialog(item)">编辑</el-button>
+                <el-button text type="danger" size="small" @click="handleDeleteAnnouncement(item.id)">删除</el-button>
+              </div>
+            </div>
             <div class="announcement-summary">{{ item.summary || item.content }}</div>
+            <div class="announcement-time">{{ item.published_at }}</div>
           </div>
           <el-empty v-if="!announcements.length" description="暂无公告" />
         </el-card>
@@ -136,6 +150,41 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="announcementDialogVisible" :title="editingAnnouncementId ? '编辑公告' : '发布公告'" width="680px">
+      <el-form :model="announcementForm" label-width="90px">
+        <el-form-item label="标题">
+          <el-input v-model="announcementForm.title" maxlength="200" />
+        </el-form-item>
+        <el-form-item label="摘要">
+          <el-input v-model="announcementForm.summary" maxlength="300" />
+        </el-form-item>
+        <el-form-item label="正文">
+          <el-input v-model="announcementForm.content" type="textarea" :rows="6" />
+        </el-form-item>
+        <el-form-item label="发布时间">
+          <el-date-picker
+            v-model="announcementForm.published_at"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            placeholder="选择发布时间"
+            style="width: 100%;"
+          />
+        </el-form-item>
+        <el-form-item label="显示设置">
+          <div class="announcement-switches">
+            <el-switch v-model="announcementForm.is_pinned" active-text="置顶" />
+            <el-switch v-model="announcementForm.is_active" active-text="启用" />
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="announcementDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="announcementSaving" @click="submitAnnouncement">
+          {{ editingAnnouncementId ? '保存' : '发布' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -145,13 +194,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../stores/user'
 import {
+  createAnnouncement,
   createForumReply,
   createForumTopic,
+  deleteAnnouncement,
   deleteForumTopic,
   getAnnouncements,
+  getAnnouncementManageList,
   getForumTopicDetail,
   getForumTopics,
-  markBestAnswer
+  markBestAnswer,
+  updateAnnouncement
 } from '../api/modules'
 
 const userStore = useUserStore()
@@ -169,11 +222,23 @@ const topics = ref([])
 const announcements = ref([])
 const detail = ref(null)
 const replyContent = ref('')
+const announcementDialogVisible = ref(false)
+const announcementSaving = ref(false)
+const editingAnnouncementId = ref(null)
 
 const createForm = reactive({
   title: '',
   content: '',
   topic_type: 'discussion'
+})
+
+const announcementForm = reactive({
+  title: '',
+  summary: '',
+  content: '',
+  is_pinned: false,
+  is_active: true,
+  published_at: ''
 })
 
 const loadTopics = async () => {
@@ -188,10 +253,72 @@ const loadTopics = async () => {
 
 const loadAnnouncements = async () => {
   try {
-    const res = await getAnnouncements({ page_size: 6 })
+    const req = userStore.isAdmin ? getAnnouncementManageList : getAnnouncements
+    const res = await req({ page_size: 20 })
     announcements.value = res.data.results || res.data || []
   } catch {
     console.warn('公告加载失败')
+  }
+}
+
+const openAnnouncementDialog = (announcement = null) => {
+  if (!userStore.isAdmin) return
+  editingAnnouncementId.value = announcement?.id || null
+  announcementForm.title = announcement?.title || ''
+  announcementForm.summary = announcement?.summary || ''
+  announcementForm.content = announcement?.content || ''
+  announcementForm.is_pinned = !!announcement?.is_pinned
+  announcementForm.is_active = announcement?.is_active ?? true
+  announcementForm.published_at = announcement?.published_at || ''
+  announcementDialogVisible.value = true
+}
+
+const submitAnnouncement = async () => {
+  if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+    ElMessage.warning('请填写公告标题和正文')
+    return
+  }
+  announcementSaving.value = true
+  try {
+    const payload = {
+      title: announcementForm.title.trim(),
+      summary: announcementForm.summary.trim(),
+      content: announcementForm.content.trim(),
+      is_pinned: announcementForm.is_pinned,
+      is_active: announcementForm.is_active
+    }
+    if (announcementForm.published_at) {
+      payload.published_at = announcementForm.published_at
+    }
+    if (editingAnnouncementId.value) {
+      await updateAnnouncement(editingAnnouncementId.value, payload)
+      ElMessage.success('公告已更新')
+    } else {
+      await createAnnouncement(payload)
+      ElMessage.success('公告已发布')
+    }
+    announcementDialogVisible.value = false
+    await loadAnnouncements()
+  } finally {
+    announcementSaving.value = false
+  }
+}
+
+const handleDeleteAnnouncement = async (announcementId) => {
+  if (!announcementId) return
+  try {
+    await ElMessageBox.confirm('确认删除该公告吗？删除后不可恢复。', '提示', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteAnnouncement(announcementId)
+    ElMessage.success('公告已删除')
+    await loadAnnouncements()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('删除公告失败', error)
+    }
   }
 }
 
@@ -302,9 +429,14 @@ onMounted(async () => {
 .title-cell { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .title-text { color: #303133; }
 .list-header { font-weight: 600; }
+.announcement-header-row { display: flex; justify-content: space-between; align-items: center; }
 .announcement-item { padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
-.announcement-title { font-weight: 600; margin-bottom: 4px; }
+.announcement-title-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.announcement-title { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px; }
+.announcement-actions { white-space: nowrap; }
 .announcement-summary { color: #606266; font-size: 13px; }
+.announcement-time { color: #909399; font-size: 12px; margin-top: 4px; }
+.announcement-switches { display: flex; gap: 14px; }
 .detail-meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .detail-meta { color: #909399; margin-bottom: 8px; }
 .detail-content { white-space: pre-wrap; margin-bottom: 16px; }
