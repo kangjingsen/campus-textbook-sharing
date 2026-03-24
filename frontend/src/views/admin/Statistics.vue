@@ -21,11 +21,11 @@
     </el-card>
 
     <!-- 流通率趋势 -->
-    <el-card v-if="shouldShow('circulation')" id="section-circulation" header="教材流通率月度趋势" style="margin-bottom: 20px;">
+    <el-card v-show="shouldShow('circulation')" id="section-circulation" header="教材流通率月度趋势" style="margin-bottom: 20px;">
       <div ref="circulationRef" style="height: 350px;"></div>
     </el-card>
 
-    <el-row v-if="shouldShow('price-college')" id="section-price-college" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('price-college')" id="section-price-college" :gutter="16" style="margin-bottom: 20px;">
       <!-- 价格趋势 -->
       <el-col :span="12">
         <el-card header="各类别平均价格趋势">
@@ -40,7 +40,7 @@
       </el-col>
     </el-row>
 
-    <el-row v-if="shouldShow('wishlist')" id="section-cancellation" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('wishlist')" id="section-cancellation" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="24">
         <el-card header="心愿单分类需求占比">
           <div ref="wishlistDemandRef" style="height: 320px;"></div>
@@ -48,7 +48,7 @@
       </el-col>
     </el-row>
 
-    <el-row v-if="shouldShow('cancellation')" id="section-ranking" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('cancellation')" id="section-ranking" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="8">
         <el-card header="取消率趋势">
           <div ref="cancelTrendRef" style="height: 300px;"></div>
@@ -66,7 +66,7 @@
       </el-col>
     </el-row>
 
-    <el-row v-if="shouldShow('ranking')" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('ranking')" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="12">
         <el-card header="售卖排行榜">
           <div ref="salesRankRef" style="height: 320px;"></div>
@@ -79,7 +79,7 @@
       </el-col>
     </el-row>
 
-    <el-row v-if="shouldShow('seller-price-index')" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('seller-price-index')" :gutter="16" style="margin-bottom: 20px;">
       <el-col :span="12">
         <el-card header="优秀商家评分排行">
           <div ref="topSellerRef" style="height: 320px;"></div>
@@ -92,7 +92,7 @@
       </el-col>
     </el-row>
 
-    <el-card v-if="shouldShow('price-table')" id="section-price-table" header="价格统计明细（均值/中位数/最小/最大/同比）" style="margin-bottom: 20px;">
+    <el-card v-show="shouldShow('price-table')" id="section-price-table" header="价格统计明细（均值/中位数/最小/最大/同比）" style="margin-bottom: 20px;">
       <el-table :data="priceMetricRows" size="small" stripe>
         <el-table-column prop="month" label="月份" width="110" />
         <el-table-column prop="avg_price" label="均价" width="90" />
@@ -105,7 +105,7 @@
       </el-table>
     </el-card>
 
-    <el-row v-if="shouldShow('distribution')" id="section-distribution" :gutter="16" style="margin-bottom: 20px;">
+    <el-row v-show="shouldShow('distribution')" id="section-distribution" :gutter="16" style="margin-bottom: 20px;">
       <!-- 交易类型分布 -->
       <el-col :span="8">
         <el-card header="交易类型占比">
@@ -127,7 +127,7 @@
     </el-row>
 
     <!-- 热门排行 -->
-    <el-card v-if="shouldShow('popular')" id="section-popular" header="热门教材排行">
+    <el-card v-show="shouldShow('popular')" id="section-popular" header="热门教材排行">
       <el-radio-group v-model="rankType" style="margin-bottom: 12px;" @change="loadRank">
         <el-radio-button value="views">按浏览量</el-radio-button>
         <el-radio-button value="orders">按订单数</el-radio-button>
