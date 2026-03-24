@@ -435,15 +435,18 @@ class TopSellersView(APIView):
     def get(self, request):
         limit = int(request.query_params.get('limit', 20))
         sellers = User.objects.filter(role='student').annotate(
-            total_orders=Count('sell_orders'),
+            total_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['pending', 'confirmed', 'completed', 'cancelled', 'returned'])),
             completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed')),
             cancelled_orders=Count('sell_orders', filter=Q(sell_orders__status='cancelled')),
+            returned_orders=Count('sell_orders', filter=Q(sell_orders__status='returned')),
+            finalized_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['completed', 'cancelled', 'returned'])),
             sales_amount=Sum('sell_orders__price', filter=Q(sell_orders__status='completed'))
         )
 
         result = []
         for s in sellers:
-            completion_rate = (s.completed_orders / s.total_orders * 100) if s.total_orders else 0
+            # 完成率只基于已定论的订单（排除待确认/已确认）
+            completion_rate = (s.completed_orders / s.finalized_orders * 100) if s.finalized_orders > 0 else 0
             score = float(s.sales_amount or 0) * 0.6 + completion_rate * 0.4
             result.append({
                 'seller_id': s.id,
@@ -775,12 +778,14 @@ class UserInsightsView(APIView):
 
         seller_rows = []
         seller_qs = User.objects.filter(role='student').annotate(
-            total_orders=Count('sell_orders'),
-            completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed'))
+            total_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['pending', 'confirmed', 'completed', 'cancelled', 'returned'])),
+            completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed')),
+            finalized_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['completed', 'cancelled', 'returned']))
         )
         for s in seller_qs:
             avg_rating = float(SellerRating.objects.filter(seller=s).aggregate(avg=Avg('score'))['avg'] or 0)
-            completion_rate = (s.completed_orders / s.total_orders * 100) if s.total_orders else 0
+            # 完成率只基于已定论的订单（排除待确认/已确认）
+            completion_rate = (s.completed_orders / s.finalized_orders * 100) if s.finalized_orders > 0 else 0
             seller_rows.append({
                 'seller_id': s.id,
                 'seller_name': s.username,
@@ -813,15 +818,18 @@ class TopSellersRatingView(APIView):
         from .models import SellerRating
         
         sellers = User.objects.filter(role='student').annotate(
-            total_orders=Count('sell_orders'),
+            total_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['pending', 'confirmed', 'completed', 'cancelled', 'returned'])),
             completed_orders=Count('sell_orders', filter=Q(sell_orders__status='completed')),
             cancelled_orders=Count('sell_orders', filter=Q(sell_orders__status='cancelled')),
+            returned_orders=Count('sell_orders', filter=Q(sell_orders__status='returned')),
+            finalized_orders=Count('sell_orders', filter=Q(sell_orders__status__in=['completed', 'cancelled', 'returned'])),
             sales_amount=Sum('sell_orders__price', filter=Q(sell_orders__status='completed'))
         )
 
         result = []
         for s in sellers:
-            completion_rate = (s.completed_orders / s.total_orders * 100) if s.total_orders else 0
+            # 完成率只基于已定论的订单（排除待确认/已确认）
+            completion_rate = (s.completed_orders / s.finalized_orders * 100) if s.finalized_orders > 0 else 0
             
             # 获取该卖家的评分
             ratings = SellerRating.objects.filter(seller=s)
@@ -894,4 +902,69 @@ class PopularTextbookDetailView(APIView):
         return Response({
             'rank_type': rank_type,
             'data': result
+        })
+
+
+class SellerRatingCreateView(APIView):
+    """创建/更新卖家评分（只有买家或平台可以评分）"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import SellerRatingSerializer
+        
+        seller_id = request.data.get('seller_id')
+        score = request.data.get('score')
+        comment = request.data.get('comment', '')
+
+        if not seller_id or score is None:
+            return Response({'error': '缺少必要参数'}, status=400)
+
+        try:
+            seller = User.objects.get(id=seller_id, role='student')
+        except User.DoesNotExist:
+            return Response({'error': '卖家不存在'}, status=404)
+
+        # 检查是否有交易关系
+        has_transaction = Order.objects.filter(
+            Q(buyer=request.user, seller=seller) | Q(buyer=seller, seller=request.user)
+        ).exists()
+
+        if not has_transaction and request.user.role != 'admin' and request.user.role != 'superadmin':
+            return Response({'error': '您与该卖家没有交易关系，无法评分'}, status=403)
+
+        # 创建或更新评分
+        rating, created = SellerRating.objects.update_or_create(
+            seller=seller,
+            rater=request.user,
+            defaults={'score': score, 'comment': comment}
+        )
+
+        serializer = SellerRatingSerializer(rating, context={'request': request})
+        message = '评分创建成功' if created else '评分更新成功'
+        return Response({'message': message, 'rating': serializer.data}, status=201 if created else 200)
+
+
+class SellerRatingListView(APIView):
+    """查看卖家的所有评分"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, seller_id):
+        from .serializers import SellerRatingSerializer
+        
+        try:
+            seller = User.objects.get(id=seller_id)
+        except User.DoesNotExist:
+            return Response({'error': '卖家不存在'}, status=404)
+
+        ratings = SellerRating.objects.filter(seller=seller).order_by('-created_at')
+        serializer = SellerRatingSerializer(ratings, many=True, context={'request': request})
+
+        avg_score = float(ratings.aggregate(avg=Avg('score'))['avg'] or 0)
+        
+        return Response({
+            'seller_id': seller_id,
+            'seller_name': seller.username,
+            'avg_score': round(avg_score, 1),
+            'rating_count': ratings.count(),
+            'ratings': serializer.data
         })

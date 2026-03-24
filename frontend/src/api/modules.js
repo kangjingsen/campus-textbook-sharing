@@ -158,6 +158,10 @@ export const getUserInsights = (params) => api.get('/statistics/user-insights/',
 export const getTopSellersRating = (params) => api.get('/statistics/top-sellers-rating/', { params })
 export const getPopularTextbookDetail = (params) => api.get('/statistics/popular-detail/', { params })
 
+// 卖家评分
+export const createSellerRating = (data) => api.post('/statistics/seller-ratings/create/', data)
+export const getSellerRatings = (sellerId) => api.get(`/statistics/seller-ratings/${sellerId}/`)
+
 
 // 社区（公告/论坛）
 export const getAnnouncements = (params) => api.get('/community/announcements/', { params })

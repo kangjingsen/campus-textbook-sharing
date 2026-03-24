@@ -240,7 +240,16 @@
 - 后端新增 `SellerRating` 模型，支持 0.1 精度评分（如 4.1、4.2、4.3）。
 - 新增统计接口：`/api/statistics/top-sellers-rating/`、`/api/statistics/popular-detail/`。
 - `user-insights` 返回结构扩展，新增 `popular_ranking` 与 `top_sellers_rating` 字段，前后端联动展示。
-
+### 6.12 商家完成率计算修复
+- **问题**：完成率计算包含待确认/已确认订单，导致数据严重不准确，显示极端分布（0%-100%）
+- **根本原因**：计算分母为 `total_orders`（包含所有订单状态），待确认订单被不公平处理
+- **解决方案**：新增 `finalized_orders` 注解，只计算已定论订单（completed/cancelled/returned）
+- **修改范围**：
+  - TopSellersView：成交额+完成率组合排行
+  - UserInsightsView：用户端优秀商家评分排行
+  - TopSellersRatingView：管理端优秀商家评分排行
+- **测试结果**：完成率从0%-100%极端分布改为25%-91%合理分布（平均65%）
+- **业务意义**：准确衡量商家交易完成情况，更公平地为商家评分排名
 ## 7. 关键文件说明（重点讲解版）
 
 ### 7.1 后端入口与配置

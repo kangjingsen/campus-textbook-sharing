@@ -19,4 +19,6 @@ urlpatterns = [
     path('cancellation-insights/', views.CancellationInsightsView.as_view(), name='cancellation_insights'),
     path('top-sellers-rating/', views.TopSellersRatingView.as_view(), name='top_sellers_rating'),
     path('popular-detail/', views.PopularTextbookDetailView.as_view(), name='popular_detail'),
+    path('seller-ratings/create/', views.SellerRatingCreateView.as_view(), name='seller_rating_create'),
+    path('seller-ratings/<int:seller_id>/', views.SellerRatingListView.as_view(), name='seller_rating_list'),
 ]

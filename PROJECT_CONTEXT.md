@@ -85,8 +85,11 @@ C:\Projects\textbook-sharing\
 - **自动审核**: 无敏感词的教材自动审核通过（`reviews/signals.py`）
 - **评论 textbook 必填修复**: `TextbookCommentSerializer` 中 `textbook` 字段加入 `read_only_fields`，通过 URL pk 自动设置
 - **统计排行图修复**: `Statistics.vue` 中 `loadRank` 的 JS `||` 短路导致“按订单数”显示成浏览量，已改为根据 `rankType` 明确取对应字段
-- **用户公开主页权限**: `UserDetailView` 改为 `AllowAny` + `UserPublicSerializer`（不暴露 email/phone/student_id）
-
+- **用户公开主页权限**: `UserDetailView` 改为 `AllowAny` + `UserPublicSerializer`（不暴露 email/phone/student_id）- **商家完成率计算修复** (v1.2.5):
+  - 问题：完成率包含待确认/已确认订单导致数据极端分布（0%-100%）
+  - 方案：新增 `finalized_orders` 注解，只计算已定论订单（completed/cancelled/returned）
+  - 影响：TopSellersView、UserInsightsView、TopSellersRatingView 三个统计视图
+  - 结果：完成率分布更合理（25%-91%，平均65%），准确反映商家交易完成情况
 ## 新增功能记录
 - **管理员删除教材**: `AdminTextbookDeleteView`，管理员可删除任意用户的教材
 - **点赞/点踩**: `TextbookVote` 模型 + `TextbookVoteView`，教材列表卡片和详情页均显示计数
