@@ -69,7 +69,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { School, Reading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getUserDetail, getTextbooks, createConversation } from '../api/modules'
+import { getUserDetail, getUserTextbooks, createConversation } from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -101,10 +101,10 @@ onMounted(async () => {
   try {
     const [userRes, textbookRes] = await Promise.all([
       getUserDetail(userId),
-      getTextbooks({ owner: userId }).catch(() => ({ data: { results: [] } }))
+      getUserTextbooks(userId).catch(() => ({ data: [] }))
     ])
     user.value = userRes.data
-    textbooks.value = textbookRes.data.results || textbookRes.data || []
+    textbooks.value = textbookRes.data || []
   } catch {
     ElMessage.error('用户不存在')
   } finally {

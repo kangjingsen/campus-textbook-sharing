@@ -14,6 +14,7 @@ urlpatterns = [
     path('change-password/', views.ChangePasswordView.as_view(), name='change_password'),
     # 查看其他用户
     path('<int:pk>/', views.UserDetailView.as_view(), name='user_detail'),
+    path('<int:pk>/textbooks/', views.UserPublishedTextbookListView.as_view(), name='user_textbooks'),
     # 管理员
     path('admin/list/', views.AdminUserListView.as_view(), name='admin_user_list'),
     path('admin/<int:pk>/', views.AdminUserUpdateView.as_view(), name='admin_user_update'),

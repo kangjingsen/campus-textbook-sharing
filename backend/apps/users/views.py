@@ -10,6 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.shortcuts import get_object_or_404
 
 from .models import User
 from .serializers import (
@@ -17,6 +18,8 @@ from .serializers import (
     UserAdminSerializer, ChangePasswordSerializer, UserPublicSerializer,
     ForgotPasswordRequestSerializer, ResetPasswordSerializer
 )
+from apps.textbooks.models import Textbook
+from apps.textbooks.serializers import TextbookListSerializer
 from utils.permissions import IsAdmin
 
 
@@ -133,6 +136,21 @@ class UserDetailView(generics.RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserPublicSerializer
     permission_classes = [permissions.AllowAny]
+
+
+class UserPublishedTextbookListView(generics.ListAPIView):
+    """公开查看用户已发布教材列表（含已售/已租）"""
+    serializer_class = TextbookListSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('pk')
+        get_object_or_404(User.objects.only('id'), pk=user_id)
+        return Textbook.objects.filter(
+            owner_id=user_id,
+            status__in=['approved', 'sold', 'rented', 'completed', 'offline']
+        ).select_related('owner', 'category').order_by('-created_at')
 
 
 class AdminUserListView(generics.ListAPIView):

@@ -123,6 +123,14 @@ python manage.py localize_real_textbooks --scope real-web --limit 300 --sleep-ms
 python manage.py seed_real_cn_books --count 500 --owners admin,test_user,wenchang,alice --sleep-ms 20
 # 若遇外部限流，可开启 broaden 词池重试
 python manage.py seed_real_cn_books --count 100 --owners admin,test_user,wenchang,alice --broaden --sleep-ms 20
+
+# 9) 创建演示账号 user1-user20（密码为用户名+123456，例如 user1/user1123456）
+python manage.py create_userx_accounts
+
+# 10) 将教材、订单、资料订单均匀重分配给前 24 个活跃用户
+python manage.py rebalance_demo_data --users 24
+# 仅预览，不写入数据库
+python manage.py rebalance_demo_data --users 24 --dry-run
 ```
 
 **expand_textbooks_real 参数说明:**
@@ -190,6 +198,9 @@ textbook-sharing/
 | 统计 | `/api/statistics/` | 多维统计数据（含热门教材排行、优秀商家评分排行） |
 | 资料订单 | `/api/textbooks/resources/orders/` | 资料订单创建、确认、支付完成、取消 |
 | WebSocket | `ws://host/ws/chat/<id>/` | 实时聊天 |
+
+用户主页新增公开接口：
+- `/api/users/<id>/textbooks/`：查看该用户发布教材（含在售、已售、已租等状态）
 
 统计模块新增端点示例：
 - `/api/statistics/popular-detail/?rank_type=views|orders|comprehensive&limit=15`

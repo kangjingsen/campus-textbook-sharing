@@ -20,6 +20,7 @@ export const updateProfile = (data) => {
 }
 export const changePassword = (data) => api.post('/users/change-password/', data)
 export const getUserDetail = (id) => api.get(`/users/${id}/`)
+export const getUserTextbooks = (id) => api.get(`/users/${id}/textbooks/`)
 export const getAdminUserList = (params) => api.get('/users/admin/list/', { params })
 export const updateAdminUser = (id, data) => api.patch(`/users/admin/${id}/`, data)
 
