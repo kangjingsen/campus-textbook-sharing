@@ -95,15 +95,18 @@ class OrderListView(generics.ListAPIView):
         user = self.request.user
         auto_complete_expired_orders_for_user(user)
         role = self.request.query_params.get('role', 'all')
+        all_users = str(self.request.query_params.get('all_users', '')).lower() in ['1', 'true', 'yes']
         order_status = self.request.query_params.get('status')
 
         qs = Order.objects.all()
-        if role == 'buyer':
-            qs = qs.filter(buyer=user)
-        elif role == 'seller':
-            qs = qs.filter(seller=user)
-        else:
-            qs = qs.filter(Q(buyer=user) | Q(seller=user))
+        is_admin_user = getattr(user, 'role', '') in ['admin', 'superadmin']
+        if not (is_admin_user and all_users):
+            if role == 'buyer':
+                qs = qs.filter(buyer=user)
+            elif role == 'seller':
+                qs = qs.filter(seller=user)
+            else:
+                qs = qs.filter(Q(buyer=user) | Q(seller=user))
 
         if order_status:
             qs = qs.filter(status=order_status)
@@ -117,6 +120,9 @@ class OrderDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         user = self.request.user
         auto_complete_expired_orders_for_user(user)
+        all_users = str(self.request.query_params.get('all_users', '')).lower() in ['1', 'true', 'yes']
+        if getattr(user, 'role', '') in ['admin', 'superadmin'] and all_users:
+            return Order.objects.all()
         return Order.objects.filter(Q(buyer=user) | Q(seller=user))
 
 

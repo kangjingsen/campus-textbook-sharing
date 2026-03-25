@@ -207,7 +207,7 @@ const initChart = (domRef) => {
 
 onMounted(async () => {
   try {
-    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes, salesRes, demandRes, topSellerRes, metricRes, wishDemandRes, cancelRes, fulfillmentRes] = await Promise.all([
+    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes, salesRes, demandRes, topSellerRes, metricRes, wishDemandRes, cancelRes, fulfillmentRes] = await Promise.allSettled([
       getCirculationRate(), getPriceTrend(), getCollegeDemand(),
       getTransactionTypeDist(), getCategoryDistribution(), getUserActivity(),
       getSalesRanking({ limit: 12 }), getDemandRanking({ limit: 12 }),
@@ -216,9 +216,31 @@ onMounted(async () => {
       getFulfillmentInsights()
     ])
 
+    const pickData = (result, fallback, name) => {
+      if (result?.status === 'fulfilled') {
+        return result.value?.data ?? fallback
+      }
+      console.error(`[Statistics] ${name} load failed`, result?.reason)
+      return fallback
+    }
+
+    const cirDataRaw = pickData(cirRes, [], 'circulation')
+    const priceDataRaw = pickData(priceRes, [], 'price-trend')
+    const collegeDataRaw = pickData(collegeRes, [], 'college-demand')
+    const txDataRaw = pickData(txRes, {}, 'transaction-types')
+    const catDataRaw = pickData(catRes, [], 'category-distribution')
+    const actDataRaw = pickData(actRes, [], 'user-activity')
+    const salesDataRaw = pickData(salesRes, [], 'sales-ranking')
+    const demandDataRaw = pickData(demandRes, [], 'demand-ranking')
+    const topSellerDataRaw = pickData(topSellerRes, [], 'top-sellers-rating')
+    const metricDataRaw = pickData(metricRes, { metrics: [] }, 'price-metrics')
+    const wishDemandDataRaw = pickData(wishDemandRes, { by_category: [] }, 'wishlist-demand')
+    const cancelDataRaw = pickData(cancelRes, { trend: [], by_category: [], by_seller: [], by_reason: [] }, 'cancellation-insights')
+    const fulfillmentDataRaw = pickData(fulfillmentRes, { funnel: { total: {} }, timing_hours: {} }, 'fulfillment-insights')
+
     // 流通率趋势 - 折线
     const cirChart = initChart(circulationRef.value)
-    const cirData = Array.isArray(cirRes.data) ? cirRes.data : []
+    const cirData = Array.isArray(cirDataRaw) ? cirDataRaw : []
     cirChart.setOption({
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: cirData.map(i => i.month) },
@@ -232,7 +254,7 @@ onMounted(async () => {
 
     // 价格趋势 - 多线
     const priceChart = initChart(priceRef.value)
-    const priceData = Array.isArray(priceRes.data) ? priceRes.data : []
+    const priceData = Array.isArray(priceDataRaw) ? priceDataRaw : []
     const categories = [...new Set(priceData.map(i => i.category))]
     const months = [...new Set(priceData.map(i => i.month))]
     priceChart.setOption({
@@ -252,7 +274,7 @@ onMounted(async () => {
 
     // 学院需求 - 柱状
     const collegeChart = initChart(collegeRef.value)
-    const collegeData = Array.isArray(collegeRes.data) ? collegeRes.data : []
+    const collegeData = Array.isArray(collegeDataRaw) ? collegeDataRaw : []
     collegeChart.setOption({
       tooltip: {
         trigger: 'axis',
@@ -280,7 +302,7 @@ onMounted(async () => {
 
     // 交易类型 - 饼图
     const txChart = initChart(txTypeRef.value)
-    const txData = txRes.data || {}
+    const txData = txDataRaw || {}
     txChart.setOption({
       tooltip: { trigger: 'item' },
       series: [{
@@ -296,7 +318,7 @@ onMounted(async () => {
 
     // 分类分布 - 饼图
     const catChart = initChart(categoryRef.value)
-    const catData = Array.isArray(catRes.data) ? catRes.data : []
+    const catData = Array.isArray(catDataRaw) ? catDataRaw : []
     catChart.setOption({
       tooltip: { trigger: 'item' },
       series: [{
@@ -307,7 +329,7 @@ onMounted(async () => {
 
     // 用户活跃度 - 柱状
     const actChart = initChart(activityRef.value)
-    const actData = Array.isArray(actRes.data) ? actRes.data : []
+    const actData = Array.isArray(actDataRaw) ? actDataRaw : []
     actChart.setOption({
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: actData.map(i => i.date), axisLabel: { rotate: 45 } },
@@ -321,7 +343,7 @@ onMounted(async () => {
 
     // 售卖排行
     const salesChart = initChart(salesRankRef.value)
-    const salesData = Array.isArray(salesRes.data) ? salesRes.data : []
+    const salesData = Array.isArray(salesDataRaw) ? salesDataRaw : []
     salesChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
@@ -336,7 +358,7 @@ onMounted(async () => {
 
     // 需求排行
     const demandChart = initChart(demandRankRef.value)
-    const demandData = Array.isArray(demandRes.data) ? demandRes.data : []
+    const demandData = Array.isArray(demandDataRaw) ? demandDataRaw : []
     demandChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
@@ -347,7 +369,7 @@ onMounted(async () => {
 
     // 优秀商家
     const topSellerChart = initChart(topSellerRef.value)
-    const topSellerData = Array.isArray(topSellerRes.data) ? topSellerRes.data : []
+    const topSellerData = Array.isArray(topSellerDataRaw) ? topSellerDataRaw : []
     topSellerChart.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: ['平均评分', '完成率'] },
@@ -362,7 +384,7 @@ onMounted(async () => {
 
     // 价格指数
     const priceMetricsChart = initChart(priceMetricsRef.value)
-    const metricRows = metricRes.data?.metrics || []
+    const metricRows = metricDataRaw?.metrics || []
     priceMetricRows.value = metricRows.slice().reverse()
     priceMetricsChart.setOption({
       tooltip: { trigger: 'axis' },
@@ -378,7 +400,7 @@ onMounted(async () => {
 
     // 心愿单分类需求占比
     const wishChart = initChart(wishlistDemandRef.value)
-    const wishData = wishDemandRes.data?.by_category || []
+    const wishData = wishDemandDataRaw?.by_category || []
     wishChart.setOption({
       tooltip: { trigger: 'item' },
       series: [{
@@ -391,7 +413,7 @@ onMounted(async () => {
 
     // 取消率趋势
     const cancelTrendChart = initChart(cancelTrendRef.value)
-    const cancelTrendData = cancelRes.data?.trend || []
+    const cancelTrendData = cancelDataRaw?.trend || []
     cancelTrendChart.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: ['取消率(%)', '取消订单'] },
@@ -406,7 +428,7 @@ onMounted(async () => {
 
     // 高取消分类
     const cancelCategoryChart = initChart(cancelCategoryRef.value)
-    const cancelCategoryData = cancelRes.data?.by_category || []
+    const cancelCategoryData = cancelDataRaw?.by_category || []
     cancelCategoryChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
@@ -417,7 +439,7 @@ onMounted(async () => {
 
     // 高取消卖家
     const cancelSellerChart = initChart(cancelSellerRef.value)
-    const cancelSellerData = cancelRes.data?.by_seller || []
+    const cancelSellerData = cancelDataRaw?.by_seller || []
     cancelSellerChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
@@ -427,7 +449,7 @@ onMounted(async () => {
     })
 
     const cancelReasonChart = initChart(cancelReasonRef.value)
-    const cancelReasonData = cancelRes.data?.by_reason || []
+    const cancelReasonData = cancelDataRaw?.by_reason || []
     cancelReasonChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: { type: 'value' },
@@ -436,7 +458,7 @@ onMounted(async () => {
       grid: { left: 130, right: 20, top: 20, bottom: 20 }
     })
 
-    const fulfillment = fulfillmentRes.data?.funnel?.total || {}
+    const fulfillment = fulfillmentDataRaw?.funnel?.total || {}
     const fulfillmentChart = initChart(fulfillmentRef.value)
     fulfillmentChart.setOption({
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -455,7 +477,7 @@ onMounted(async () => {
       grid: { left: 50, right: 20, top: 30, bottom: 30 }
     })
 
-    const timing = fulfillmentRes.data?.timing_hours || {}
+    const timing = fulfillmentDataRaw?.timing_hours || {}
     fulfillmentTimingRows.value = [
       {
         type: '教材',

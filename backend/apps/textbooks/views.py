@@ -800,14 +800,18 @@ class ResourceOrderListView(generics.ListAPIView):
 
     def get_queryset(self):
         role = self.request.query_params.get('role', 'all')
+        all_users = str(self.request.query_params.get('all_users', '')).lower() in ['1', 'true', 'yes']
         order_status = self.request.query_params.get('status')
         qs = ResourceOrder.objects.all()
-        if role == 'buyer':
-            qs = qs.filter(buyer=self.request.user)
-        elif role == 'seller':
-            qs = qs.filter(seller=self.request.user)
-        else:
-            qs = qs.filter(Q(buyer=self.request.user) | Q(seller=self.request.user))
+        user = self.request.user
+        is_admin_user = getattr(user, 'role', '') in ['admin', 'superadmin']
+        if not (is_admin_user and all_users):
+            if role == 'buyer':
+                qs = qs.filter(buyer=user)
+            elif role == 'seller':
+                qs = qs.filter(seller=user)
+            else:
+                qs = qs.filter(Q(buyer=user) | Q(seller=user))
 
         if order_status:
             qs = qs.filter(status=order_status)
@@ -820,7 +824,11 @@ class ResourceOrderDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return ResourceOrder.objects.filter(Q(buyer=self.request.user) | Q(seller=self.request.user))
+        user = self.request.user
+        all_users = str(self.request.query_params.get('all_users', '')).lower() in ['1', 'true', 'yes']
+        if getattr(user, 'role', '') in ['admin', 'superadmin'] and all_users:
+            return ResourceOrder.objects.all()
+        return ResourceOrder.objects.filter(Q(buyer=user) | Q(seller=user))
 
 
 class ResourceOrderConfirmView(APIView):

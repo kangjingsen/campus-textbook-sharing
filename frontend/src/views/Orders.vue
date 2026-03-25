@@ -10,11 +10,29 @@
         </h2>
       </template>
 
-      <el-tabs v-model="activeRole" @tab-change="loadOrders">
-        <el-tab-pane label="全部" name="all" />
-        <el-tab-pane label="我买的" name="buyer" />
-        <el-tab-pane label="我卖的" name="seller" />
-      </el-tabs>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <el-tabs v-model="activeRole" @tab-change="loadOrders" style="flex: 1;">
+          <el-tab-pane label="全部" name="all" />
+          <el-tab-pane label="我买的" name="buyer" :disabled="viewAllOrders" />
+          <el-tab-pane label="我卖的" name="seller" :disabled="viewAllOrders" />
+        </el-tabs>
+        <el-button
+          v-if="canViewAllOrders"
+          size="small"
+          :type="viewAllOrders ? 'primary' : 'default'"
+          @click="toggleAllOrdersView"
+          style="margin-left: 12px; margin-bottom: 8px;">
+          {{ viewAllOrders ? '退出全站视图' : '查看全站订单' }}
+        </el-button>
+      </div>
+
+      <el-alert
+        v-if="viewAllOrders"
+        title="全站订单只读视图：仅查看状态，不可执行取消/确认/完成操作"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 12px;"
+      />
 
       <el-radio-group v-model="statusFilter" size="small" @change="loadOrders" style="margin-bottom: 16px;">
         <el-radio-button value="">全部状态</el-radio-button>
@@ -50,7 +68,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column v-if="!viewAllOrders" label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <!-- 卖方操作 -->
             <template v-if="row.seller === userStore.user?.id">
@@ -92,7 +110,7 @@
             <el-tag :type="getStatusTag(row.status)" size="small">{{ row.status_display }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column v-if="!viewAllOrders" label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.seller === userStore.user?.id && row.status === 'pending'"
@@ -165,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrders, confirmOrder, completeOrder, cancelOrder, returnOrder,
@@ -180,6 +198,7 @@ const total = ref(0)
 const page = ref(1)
 const activeRole = ref('all')
 const statusFilter = ref('')
+const viewAllOrders = ref(false)
 const resourceOrders = ref([])
 const resourceLoading = ref(false)
 const orderNotifyCount = ref(0)
@@ -199,6 +218,8 @@ const cancelReasonOptions = [
   { value: 'other', label: '其他' }
 ]
 let pollTimer = null
+
+const canViewAllOrders = computed(() => ['admin', 'superadmin'].includes(userStore.user?.role || ''))
 
 const getStatusTag = (s) => ({
   pending: 'warning', confirmed: '', completed: 'success',
@@ -245,7 +266,11 @@ const loadOrderNotifications = async () => {
 const loadOrders = async () => {
   loading.value = true
   try {
-    const params = { page: page.value, role: activeRole.value }
+    const params = {
+      page: page.value,
+      role: viewAllOrders.value ? 'all' : activeRole.value
+    }
+    if (viewAllOrders.value) params.all_users = 1
     if (statusFilter.value) params.status = statusFilter.value
     const res = await getOrders(params)
     orders.value = res.data.results || res.data
@@ -288,11 +313,22 @@ const handleReturn = async (id) => {
 const loadResourceOrders = async () => {
   resourceLoading.value = true
   try {
-    const res = await getResourceOrders({ role: activeRole.value === 'all' ? undefined : activeRole.value })
+    const params = {
+      role: viewAllOrders.value ? 'all' : (activeRole.value === 'all' ? undefined : activeRole.value)
+    }
+    if (viewAllOrders.value) params.all_users = 1
+    const res = await getResourceOrders(params)
     resourceOrders.value = res.data.results || res.data || []
   } catch {} finally {
     resourceLoading.value = false
   }
+}
+
+const toggleAllOrdersView = async () => {
+  viewAllOrders.value = !viewAllOrders.value
+  page.value = 1
+  activeRole.value = 'all'
+  await loadOrders()
 }
 
 const handleConfirmResource = async (id) => {
