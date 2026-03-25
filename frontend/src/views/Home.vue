@@ -103,7 +103,13 @@
       </div>
       <el-row :gutter="16">
         <el-col :xs="24" :md="12">
-          <el-card class="info-card" v-for="item in announcements" :key="item.id" style="margin-bottom: 12px;">
+          <el-card
+            class="info-card"
+            v-for="item in announcements"
+            :key="item.id"
+            style="margin-bottom: 12px; cursor: pointer;"
+            @click="openAnnouncementDetail(item)"
+          >
             <h4>{{ item.title }}</h4>
             <p class="info-text">{{ item.summary || item.content }}</p>
           </el-card>
@@ -118,6 +124,13 @@
         </el-col>
       </el-row>
     </div>
+
+    <el-dialog v-model="announcementDetailVisible" width="680px" :title="currentAnnouncement?.title || '公告详情'">
+      <div v-if="currentAnnouncement" class="announcement-detail-content">
+        <div class="announcement-detail-meta">发布时间：{{ currentAnnouncement.published_at || '-' }}</div>
+        <div class="announcement-detail-text">{{ currentAnnouncement.content }}</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -138,6 +151,8 @@ const popular = ref([])
 const wishlistTop = ref([])
 const announcements = ref([])
 const forumTopics = ref([])
+const announcementDetailVisible = ref(false)
+const currentAnnouncement = ref(null)
 
 const getTypeTag = (type) => ({ sell: '', rent: 'warning', free: 'success' }[type] || '')
 const getTypeLabel = (type) => ({ sell: '出售', rent: '租赁', free: '免费' }[type] || '')
@@ -195,6 +210,12 @@ const handleWishSearch = (title) => {
   if (!title) return
   router.push({ path: '/textbooks', query: { q: title } })
 }
+
+const openAnnouncementDetail = (item) => {
+  if (!item) return
+  currentAnnouncement.value = item
+  announcementDetailVisible.value = true
+}
 </script>
 
 <style scoped>
@@ -251,4 +272,6 @@ const handleWishSearch = (title) => {
 .wish-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
 .info-card h4 { margin: 0 0 6px; font-size: 15px; }
 .info-text { margin: 0; color: #606266; font-size: 13px; }
+.announcement-detail-meta { color: #909399; margin-bottom: 12px; }
+.announcement-detail-text { white-space: pre-wrap; line-height: 1.8; color: #303133; }
 </style>

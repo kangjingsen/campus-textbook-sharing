@@ -63,7 +63,12 @@
               <el-button v-if="userStore.isAdmin" type="primary" size="small" @click="openAnnouncementDialog()">发布公告</el-button>
             </div>
           </template>
-          <div v-for="item in announcements" :key="item.id" class="announcement-item">
+          <div
+            v-for="item in announcements"
+            :key="item.id"
+            class="announcement-item"
+            @click="openAnnouncementDetail(item)"
+          >
             <div class="announcement-title-row">
               <div class="announcement-title">
                 {{ item.title }}
@@ -71,8 +76,8 @@
                 <el-tag v-if="!item.is_active" type="info" size="small">已停用</el-tag>
               </div>
               <div v-if="userStore.isAdmin" class="announcement-actions">
-                <el-button text type="primary" size="small" @click="openAnnouncementDialog(item)">编辑</el-button>
-                <el-button text type="danger" size="small" @click="handleDeleteAnnouncement(item.id)">删除</el-button>
+                <el-button text type="primary" size="small" @click.stop="openAnnouncementDialog(item)">编辑</el-button>
+                <el-button text type="danger" size="small" @click.stop="handleDeleteAnnouncement(item.id)">删除</el-button>
               </div>
             </div>
             <div class="announcement-summary">{{ item.summary || item.content }}</div>
@@ -185,6 +190,15 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="announcementDetailVisible" width="680px" :title="currentAnnouncement?.title || '公告详情'">
+      <div v-if="currentAnnouncement" class="announcement-detail-content">
+        <div class="announcement-detail-meta">
+          发布时间：{{ currentAnnouncement.published_at || '-' }}
+        </div>
+        <div class="announcement-detail-text">{{ currentAnnouncement.content }}</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -225,6 +239,8 @@ const replyContent = ref('')
 const announcementDialogVisible = ref(false)
 const announcementSaving = ref(false)
 const editingAnnouncementId = ref(null)
+const announcementDetailVisible = ref(false)
+const currentAnnouncement = ref(null)
 
 const createForm = reactive({
   title: '',
@@ -280,6 +296,12 @@ const openAnnouncementDialog = (announcement = null) => {
   announcementForm.is_active = announcement?.is_active ?? true
   announcementForm.published_at = announcement?.published_at || ''
   announcementDialogVisible.value = true
+}
+
+const openAnnouncementDetail = (announcement) => {
+  if (!announcement) return
+  currentAnnouncement.value = announcement
+  announcementDetailVisible.value = true
 }
 
 const submitAnnouncement = async () => {
@@ -439,13 +461,15 @@ onMounted(async () => {
 .title-text { color: #303133; }
 .list-header { font-weight: 600; }
 .announcement-header-row { display: flex; justify-content: space-between; align-items: center; }
-.announcement-item { padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
+.announcement-item { padding: 8px 0; border-bottom: 1px solid #f0f2f5; cursor: pointer; }
 .announcement-title-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .announcement-title { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px; }
 .announcement-actions { white-space: nowrap; }
 .announcement-summary { color: #606266; font-size: 13px; }
 .announcement-time { color: #909399; font-size: 12px; margin-top: 4px; }
 .announcement-switches { display: flex; gap: 14px; }
+.announcement-detail-meta { color: #909399; margin-bottom: 12px; }
+.announcement-detail-text { white-space: pre-wrap; line-height: 1.8; color: #303133; }
 .detail-meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .detail-meta { color: #909399; margin-bottom: 8px; }
 .detail-content { white-space: pre-wrap; margin-bottom: 16px; }
