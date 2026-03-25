@@ -125,6 +125,9 @@ python manage.py shell -c "from apps.textbooks.models import Textbook; total=Tex
 
 # 5) 统计演示订单补数（跨月 completed/cancelled）
 python manage.py seed_stats_orders
+# 管理端统计页推荐参数：覆盖流通率月度趋势、各类别均价趋势、价格指数/环比
+python manage.py seed_stats_orders --months 18 --orders-per-month 9 --cancel-every 5
+# 说明：若工作区 .venv 缺少 Django，可直接用系统 python 执行（与 start.bat 一致）
 
 # 6) 对 REAL_WEB 扩容数据执行分类纠偏（先预览后写入）
 python manage.py reclassify_textbooks --scope real-web --dry-run
