@@ -58,6 +58,8 @@ export const adminDeleteTextbook = (id) => api.delete(`/textbooks/admin/${id}/de
 // 点赞/点踩
 export const getTextbookVotes = (id) => api.get(`/textbooks/${id}/vote/`)
 export const voteTextbook = (id, vote) => api.post(`/textbooks/${id}/vote/`, { vote })
+export const getTextbookRating = (id) => api.get(`/textbooks/${id}/rating/`)
+export const rateTextbook = (id, score) => api.post(`/textbooks/${id}/rating/`, { score })
 
 // 评论
 export const getTextbookComments = (id, params) => api.get(`/textbooks/${id}/comments/`, { params })
@@ -66,6 +68,11 @@ export const deleteComment = (id) => api.delete(`/textbooks/comments/${id}/delet
 
 // 在线资料共享
 export const getResources = (params) => api.get('/textbooks/resources/', { params })
+export const getMyResources = (params) => api.get('/textbooks/resources/my/', { params })
+export const exportMyResources = (params) => api.get('/textbooks/resources/my/', {
+  params: { ...(params || {}), export: 1 },
+  responseType: 'blob'
+})
 export const uploadResource = (data) => {
   const formData = new FormData()
   for (const key in data) {
@@ -91,7 +98,7 @@ export const confirmResourceOrder = (id, data) => {
 }
 export const completeResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/complete/`, data)
 export const sellerCompleteResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/seller-complete/`)
-export const cancelResourceOrder = (id) => api.post(`/textbooks/resources/orders/${id}/cancel/`)
+export const cancelResourceOrder = (id, data) => api.post(`/textbooks/resources/orders/${id}/cancel/`, data)
 
 // 分类
 export const getCategoryTree = () => api.get('/textbooks/categories/tree/')
@@ -107,7 +114,7 @@ export const getOrders = (params) => api.get('/orders/', { params })
 export const getOrderDetail = (id) => api.get(`/orders/${id}/`)
 export const confirmOrder = (id) => api.post(`/orders/${id}/confirm/`)
 export const completeOrder = (id) => api.post(`/orders/${id}/complete/`)
-export const cancelOrder = (id) => api.post(`/orders/${id}/cancel/`)
+export const cancelOrder = (id, data) => api.post(`/orders/${id}/cancel/`, data)
 export const returnOrder = (id) => api.post(`/orders/${id}/return/`)
 
 // 消息
@@ -154,6 +161,7 @@ export const getTopSellers = (params) => api.get('/statistics/top-sellers/', { p
 export const getPriceMetrics = (params) => api.get('/statistics/price-metrics/', { params })
 export const getWishlistDemand = () => api.get('/statistics/wishlist-demand/')
 export const getCancellationInsights = (params) => api.get('/statistics/cancellation-insights/', { params })
+export const getFulfillmentInsights = (params) => api.get('/statistics/fulfillment-insights/', { params })
 export const getUserInsights = (params) => api.get('/statistics/user-insights/', { params })
 export const getTopSellersRating = (params) => api.get('/statistics/top-sellers-rating/', { params })
 export const getPopularTextbookDetail = (params) => api.get('/statistics/popular-detail/', { params })

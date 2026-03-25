@@ -8,6 +8,8 @@ class OrderSerializer(serializers.ModelSerializer):
     buyer_name = serializers.CharField(source='buyer.username', read_only=True)
     seller_name = serializers.CharField(source='seller.username', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    cancel_reason_display = serializers.CharField(source='get_cancel_reason_display', read_only=True)
+    cancel_by_role_display = serializers.CharField(source='get_cancel_by_role_display', read_only=True)
 
     class Meta:
         model = Order
@@ -15,6 +17,8 @@ class OrderSerializer(serializers.ModelSerializer):
                   'buyer', 'buyer_name', 'seller', 'seller_name',
                   'transaction_type', 'price', 'status', 'status_display',
                   'rent_start_date', 'rent_end_date', 'note',
+                  'cancel_reason', 'cancel_reason_display',
+                  'cancel_by_role', 'cancel_by_role_display',
                   'created_at', 'updated_at', 'started_at', 'completed_at']
         read_only_fields = ['id', 'order_no', 'buyer', 'seller', 'transaction_type',
                            'price', 'created_at', 'updated_at', 'started_at', 'completed_at']

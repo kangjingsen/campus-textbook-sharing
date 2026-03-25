@@ -1,7 +1,6 @@
-<template>
+﻿<template>
   <div class="detail-page" v-loading="loading">
     <el-row :gutter="24" v-if="textbook">
-      <!-- 左侧封面 -->
       <el-col :span="8">
         <el-card>
           <div class="cover-wrapper">
@@ -10,7 +9,6 @@
         </el-card>
       </el-col>
 
-      <!-- 右侧信息 -->
       <el-col :span="16">
         <el-card>
           <div class="info-header">
@@ -38,9 +36,7 @@
             <span class="price" v-if="textbook.transaction_type !== 'free'">¥{{ textbook.price }}</span>
             <span class="price free" v-else>免费赠送</span>
             <span v-if="textbook.original_price" class="original-price">原价 ¥{{ textbook.original_price }}</span>
-            <span v-if="textbook.transaction_type === 'rent'" class="rent-info">
-              租赁{{ textbook.rent_duration }}天
-            </span>
+            <span v-if="textbook.transaction_type === 'rent'" class="rent-info">租赁{{ textbook.rent_duration }}天</span>
           </div>
 
           <div class="description" v-if="textbook.description">
@@ -48,7 +44,23 @@
             <p>{{ textbook.description }}</p>
           </div>
 
-          <!-- 点赞/点踩 -->
+          <div class="rating-section">
+            <div class="rating-head">
+              <h3>教材评分</h3>
+              <span class="rating-summary">均分 {{ ratingAvg }}（{{ ratingCount }} 人）</span>
+            </div>
+            <el-rate
+              v-model="myRating"
+              :max="5"
+              clearable
+              :disabled="!userStore.isLoggedIn || textbook.owner === userStore.user?.id || ratingLoading"
+              @change="handleRate"
+            />
+            <p class="rating-tip" v-if="userStore.isLoggedIn && textbook.owner !== userStore.user?.id">
+              点击星星评分；再次点击同分值或清空可取消评分
+            </p>
+          </div>
+
           <div class="vote-section">
             <el-button :type="myVote === 1 ? 'primary' : ''" @click="handleVote(1)" :icon="CaretTop" round>
               👍 {{ likes }}
@@ -58,7 +70,6 @@
             </el-button>
           </div>
 
-          <!-- 发布者信息 -->
           <div class="owner-info" @click="$router.push(`/user/${textbook.owner}`)" style="cursor: pointer;">
             <el-avatar :size="40" :src="textbook.owner_avatar" />
             <div>
@@ -67,7 +78,6 @@
             </div>
           </div>
 
-          <!-- 操作按钮 -->
           <div class="actions" v-if="userStore.isLoggedIn">
             <template v-if="textbook.owner !== userStore.user?.id">
               <el-button type="primary" size="large" @click="handleOrder" :disabled="textbook.status !== 'approved'">
@@ -79,31 +89,29 @@
               <el-button @click="$router.push(`/publish?edit=${textbook.id}`)">编辑</el-button>
               <el-button type="danger" @click="handleDelete">删除</el-button>
             </template>
-            <!-- 管理员可删除任何人的教材 -->
-            <el-button v-if="userStore.isAdmin && textbook.owner !== userStore.user?.id"
-                       type="danger" @click="handleAdminDelete">🗑 管理员删除</el-button>
+            <el-button
+              v-if="userStore.isAdmin && textbook.owner !== userStore.user?.id"
+              type="danger"
+              @click="handleAdminDelete"
+            >
+              🗑 管理员删除
+            </el-button>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 评论区 -->
     <el-card style="margin-top: 20px;" v-if="textbook">
       <template #header><span>💬 评论区 ({{ comments.length }})</span></template>
 
-      <!-- 发表评论 -->
       <div class="comment-input" v-if="userStore.isLoggedIn">
-        <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写下你的评论..."
-                  maxlength="500" show-word-limit />
-        <el-button type="primary" style="margin-top: 8px;" @click="submitComment" :disabled="!newComment.trim()">
-          发表评论
-        </el-button>
+        <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写下你的评论..." maxlength="500" show-word-limit />
+        <el-button type="primary" style="margin-top: 8px;" @click="submitComment" :disabled="!newComment.trim()">发表评论</el-button>
       </div>
       <el-alert v-else type="info" :closable="false" style="margin-bottom: 16px;">
         <router-link to="/login">登录</router-link> 后即可评论
       </el-alert>
 
-      <!-- 评论列表 -->
       <div class="comment-list">
         <div v-for="comment in comments" :key="comment.id" class="comment-item">
           <el-avatar :size="36" :src="comment.avatar" style="cursor:pointer" @click="$router.push(`/user/${comment.user}`)" />
@@ -111,11 +119,17 @@
             <div class="comment-meta">
               <span class="comment-user" style="cursor:pointer" @click="$router.push(`/user/${comment.user}`)">{{ comment.username }}</span>
               <span class="comment-time">{{ comment.created_at }}</span>
-              <el-button v-if="userStore.user?.id === comment.user || userStore.isAdmin"
-                         type="danger" link size="small" @click="handleDeleteComment(comment.id)">删除</el-button>
+              <el-button
+                v-if="userStore.user?.id === comment.user || userStore.isAdmin"
+                type="danger"
+                link
+                size="small"
+                @click="handleDeleteComment(comment.id)"
+              >
+                删除
+              </el-button>
             </div>
             <p class="comment-content">{{ comment.content }}</p>
-            <!-- 回复 -->
             <div v-if="comment.replies?.length" class="replies">
               <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
                 <span class="comment-user" style="cursor:pointer" @click="$router.push(`/user/${reply.user}`)">{{ reply.username }}</span>：
@@ -129,18 +143,19 @@
       </div>
     </el-card>
 
-    <!-- 下单对话框 -->
     <el-dialog v-model="orderDialogVisible" title="确认下单" width="480px">
       <el-form :model="orderForm" label-width="100px">
         <el-form-item label="教材">{{ textbook?.title }}</el-form-item>
-        <el-form-item label="价格">
-          <span class="price">¥{{ textbook?.price }}</span>
-        </el-form-item>
+        <el-form-item label="价格"><span class="price">¥{{ textbook?.price }}</span></el-form-item>
         <el-form-item label="交易类型">{{ textbook?.transaction_type_display }}</el-form-item>
         <el-form-item v-if="textbook?.transaction_type === 'rent'" label="租赁日期">
-          <el-date-picker v-model="orderForm.dateRange" type="daterange"
-                          start-placeholder="开始日期" end-placeholder="结束日期"
-                          value-format="YYYY-MM-DD" />
+          <el-date-picker
+            v-model="orderForm.dateRange"
+            type="daterange"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+          />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="orderForm.note" type="textarea" placeholder="给卖家留言..." />
@@ -160,9 +175,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CaretTop, CaretBottom } from '@element-plus/icons-vue'
 import {
-  getTextbookDetail, createOrder, deleteTextbook, createConversation,
-  getTextbookVotes, voteTextbook,
-  getTextbookComments, createComment, deleteComment,
+  getTextbookDetail,
+  createOrder,
+  deleteTextbook,
+  createConversation,
+  getTextbookVotes,
+  voteTextbook,
+  getTextbookRating,
+  rateTextbook,
+  getTextbookComments,
+  createComment,
+  deleteComment,
   adminDeleteTextbook
 } from '../api/modules'
 import { useUserStore } from '../stores/user'
@@ -177,12 +200,15 @@ const orderDialogVisible = ref(false)
 const orderLoading = ref(false)
 const orderForm = reactive({ note: '', dateRange: null })
 
-// 投票
 const likes = ref(0)
 const dislikes = ref(0)
 const myVote = ref(0)
 
-// 评论
+const ratingAvg = ref(0)
+const ratingCount = ref(0)
+const myRating = ref(0)
+const ratingLoading = ref(false)
+
 const comments = ref([])
 const newComment = ref('')
 
@@ -191,15 +217,19 @@ const getTypeTag = (type) => ({ sell: '', rent: 'warning', free: 'success' }[typ
 onMounted(async () => {
   const id = route.params.id
   try {
-    const [detailRes, voteRes, commentRes] = await Promise.all([
+    const [detailRes, voteRes, ratingRes, commentRes] = await Promise.all([
       getTextbookDetail(id),
       getTextbookVotes(id).catch(() => ({ data: { likes: 0, dislikes: 0, my_vote: 0 } })),
+      getTextbookRating(id).catch(() => ({ data: { avg_score: 0, rating_count: 0, my_rating: 0 } })),
       getTextbookComments(id).catch(() => ({ data: { results: [] } }))
     ])
     textbook.value = detailRes.data
     likes.value = voteRes.data.likes
     dislikes.value = voteRes.data.dislikes
     myVote.value = voteRes.data.my_vote
+    ratingAvg.value = Number(ratingRes.data.avg_score || detailRes.data.rating_avg || 0)
+    ratingCount.value = Number(ratingRes.data.rating_count || detailRes.data.rating_count || 0)
+    myRating.value = Number(ratingRes.data.my_rating || detailRes.data.my_rating || 0)
     comments.value = commentRes.data.results || commentRes.data || []
   } catch {
     ElMessage.error('教材不存在')
@@ -222,11 +252,29 @@ const handleVote = async (val) => {
   } catch {}
 }
 
+const handleRate = async (val) => {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  if (!textbook.value || textbook.value.owner === userStore.user?.id) return
+
+  ratingLoading.value = true
+  try {
+    const score = Number(val || 0)
+    const res = await rateTextbook(route.params.id, score)
+    ratingAvg.value = Number(res.data.avg_score || 0)
+    ratingCount.value = Number(res.data.rating_count || 0)
+    myRating.value = Number(res.data.my_rating || 0)
+  } finally {
+    ratingLoading.value = false
+  }
+}
+
 const submitComment = async () => {
   try {
     await createComment(route.params.id, { content: newComment.value })
     newComment.value = ''
-    // 重新加载评论
     const res = await getTextbookComments(route.params.id)
     comments.value = res.data.results || res.data || []
     ElMessage.success('评论成功')
@@ -295,36 +343,186 @@ const handleAdminDelete = async () => {
 
 <style scoped>
 .cover-wrapper {
-  display: flex; align-items: center; justify-content: center;
-  min-height: 400px; background: #f5f7fa; border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  background: #f5f7fa;
+  border-radius: 8px;
 }
-.cover-wrapper img { max-width: 100%; max-height: 400px; object-fit: contain; }
-.info-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-.info-header h1 { font-size: 24px; }
-.info-desc { margin-bottom: 20px; }
-.price-section { margin: 20px 0; }
-.price { font-size: 28px; color: #f56c6c; font-weight: bold; }
-.price.free { color: #67c23a; }
-.original-price { color: #909399; text-decoration: line-through; margin-left: 12px; font-size: 14px; }
-.rent-info { color: #e6a23c; margin-left: 12px; }
-.description { margin: 20px 0; }
-.description h3 { font-size: 16px; margin-bottom: 8px; }
-.description p { color: #606266; line-height: 1.8; }
-.vote-section { display: flex; gap: 12px; margin: 16px 0; }
-.owner-info { display: flex; align-items: center; gap: 12px; padding: 16px; background: #f5f7fa; border-radius: 8px; margin: 20px 0; }
-.owner-name { font-weight: bold; }
-.owner-college { color: #909399; font-size: 13px; }
-.actions { display: flex; gap: 12px; margin-top: 20px; }
 
-/* 评论区 */
-.comment-input { margin-bottom: 20px; }
-.comment-list { margin-top: 12px; }
-.comment-item { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid #ebeef5; }
-.comment-body { flex: 1; }
-.comment-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.comment-user { font-weight: bold; font-size: 14px; color: #303133; }
-.comment-time { color: #909399; font-size: 12px; }
-.comment-content { color: #606266; line-height: 1.6; margin: 0; }
-.replies { margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px; }
-.reply-item { margin: 4px 0; font-size: 13px; color: #606266; }
+.cover-wrapper img {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.info-header h1 {
+  font-size: 24px;
+}
+
+.info-desc {
+  margin-bottom: 20px;
+}
+
+.price-section {
+  margin: 20px 0;
+}
+
+.price {
+  font-size: 28px;
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+.price.free {
+  color: #67c23a;
+}
+
+.original-price {
+  color: #909399;
+  text-decoration: line-through;
+  margin-left: 12px;
+  font-size: 14px;
+}
+
+.rent-info {
+  color: #e6a23c;
+  margin-left: 12px;
+}
+
+.description {
+  margin: 20px 0;
+}
+
+.description h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.description p {
+  color: #606266;
+  line-height: 1.8;
+}
+
+.rating-section {
+  margin: 16px 0;
+}
+
+.rating-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rating-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.rating-summary {
+  color: #606266;
+  font-size: 13px;
+}
+
+.rating-tip {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.vote-section {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.owner-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.owner-name {
+  font-weight: bold;
+}
+
+.owner-college {
+  color: #909399;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.comment-input {
+  margin-bottom: 20px;
+}
+
+.comment-list {
+  margin-top: 12px;
+}
+
+.comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.comment-body {
+  flex: 1;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.comment-user {
+  font-weight: bold;
+  font-size: 14px;
+  color: #303133;
+}
+
+.comment-time {
+  color: #909399;
+  font-size: 12px;
+}
+
+.comment-content {
+  color: #606266;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.replies {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.reply-item {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #606266;
+}
 </style>

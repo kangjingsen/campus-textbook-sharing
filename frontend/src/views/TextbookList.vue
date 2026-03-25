@@ -68,6 +68,14 @@
                 <el-tag class="card-type" :type="getTypeTag(item.transaction_type)" size="small">
                   {{ item.transaction_type_display }}
                 </el-tag>
+                <el-tag
+                  v-if="item.status !== 'approved'"
+                  class="card-status"
+                  type="danger"
+                  size="small"
+                >
+                  已售
+                </el-tag>
               </div>
               <div class="card-info">
                 <h4>{{ item.title }}</h4>
@@ -203,6 +211,7 @@ const handleCategoryClick = (data) => {
 }
 .card-cover img { max-height: 100%; max-width: 100%; object-fit: cover; }
 .card-type { position: absolute; top: 8px; right: 8px; }
+.card-status { position: absolute; top: 8px; left: 8px; }
 .card-info { padding-top: 10px; }
 .card-info h4 { font-size: 14px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meta { color: #909399; font-size: 12px; margin-bottom: 6px; }

@@ -11,6 +11,7 @@
           <el-option label="价格与学院需求" value="price-college" />
           <el-option label="心愿单分类需求" value="wishlist" />
           <el-option label="取消率分析" value="cancellation" />
+          <el-option label="履约漏斗与时效" value="fulfillment" />
           <el-option label="需求与售卖排行" value="ranking" />
           <el-option label="优秀商家与价格指数" value="seller-price-index" />
           <el-option label="价格统计明细" value="price-table" />
@@ -49,19 +50,41 @@
     </el-row>
 
     <el-row v-show="shouldShow('cancellation')" id="section-ranking" :gutter="16" style="margin-bottom: 20px;">
-      <el-col :span="8">
+      <el-col :span="6">
         <el-card header="取消率趋势">
           <div ref="cancelTrendRef" style="height: 300px;"></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :span="6">
         <el-card header="高取消分类">
           <div ref="cancelCategoryRef" style="height: 300px;"></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :span="6">
         <el-card header="高取消卖家">
           <div ref="cancelSellerRef" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card header="取消原因分布">
+          <div ref="cancelReasonRef" style="height: 300px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row v-show="shouldShow('fulfillment')" :gutter="16" style="margin-bottom: 20px;">
+      <el-col :span="14">
+        <el-card header="订单履约漏斗（教材+资料）">
+          <div ref="fulfillmentRef" style="height: 320px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="10">
+        <el-card header="履约平均时效（小时）">
+          <el-table :data="fulfillmentTimingRows" size="small" stripe>
+            <el-table-column prop="type" label="订单类型" width="90" />
+            <el-table-column prop="avg_confirm_hours" label="平均确认时长" width="120" />
+            <el-table-column prop="avg_complete_hours" label="平均完成时长" width="120" />
+          </el-table>
         </el-card>
       </el-col>
     </el-row>
@@ -146,7 +169,7 @@ import {
   getTransactionTypeDist, getCategoryDistribution,
   getUserActivity,
   getSalesRanking, getDemandRanking, getPriceMetrics, getWishlistDemand,
-  getCancellationInsights, getTopSellersRating, getPopularTextbookDetail
+  getCancellationInsights, getTopSellersRating, getPopularTextbookDetail, getFulfillmentInsights
 } from '../../api/modules'
 
 
@@ -165,7 +188,10 @@ const wishlistDemandRef = ref(null)
 const cancelTrendRef = ref(null)
 const cancelCategoryRef = ref(null)
 const cancelSellerRef = ref(null)
+const cancelReasonRef = ref(null)
+const fulfillmentRef = ref(null)
 const priceMetricRows = ref([])
+const fulfillmentTimingRows = ref([])
 const rankChartIns = ref(null)
 const rankType = ref('views')
 const activeSection = ref('all')
@@ -181,12 +207,13 @@ const initChart = (domRef) => {
 
 onMounted(async () => {
   try {
-    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes, salesRes, demandRes, topSellerRes, metricRes, wishDemandRes, cancelRes] = await Promise.all([
+    const [cirRes, priceRes, collegeRes, txRes, catRes, actRes, salesRes, demandRes, topSellerRes, metricRes, wishDemandRes, cancelRes, fulfillmentRes] = await Promise.all([
       getCirculationRate(), getPriceTrend(), getCollegeDemand(),
       getTransactionTypeDist(), getCategoryDistribution(), getUserActivity(),
       getSalesRanking({ limit: 12 }), getDemandRanking({ limit: 12 }),
       getTopSellersRating({ limit: 12 }), getPriceMetrics({ months: 24 }), getWishlistDemand(),
-      getCancellationInsights({ months: 12, limit: 10 })
+      getCancellationInsights({ months: 12, limit: 10 }),
+      getFulfillmentInsights()
     ])
 
     // 流通率趋势 - 折线
@@ -398,6 +425,49 @@ onMounted(async () => {
       series: [{ type: 'bar', data: cancelSellerData.map(i => i.count || 0).reverse(), itemStyle: { color: '#909399' } }],
       grid: { left: 130, right: 20, top: 20, bottom: 20 }
     })
+
+    const cancelReasonChart = initChart(cancelReasonRef.value)
+    const cancelReasonData = cancelRes.data?.by_reason || []
+    cancelReasonChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: cancelReasonData.map(i => i.reason).reverse(), axisLabel: { width: 120, overflow: 'truncate' } },
+      series: [{ type: 'bar', data: cancelReasonData.map(i => i.count || 0).reverse(), itemStyle: { color: '#f56c6c' } }],
+      grid: { left: 130, right: 20, top: 20, bottom: 20 }
+    })
+
+    const fulfillment = fulfillmentRes.data?.funnel?.total || {}
+    const fulfillmentChart = initChart(fulfillmentRef.value)
+    fulfillmentChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      xAxis: { type: 'category', data: ['创建', '已确认', '已完成', '已取消'] },
+      yAxis: { type: 'value' },
+      series: [{
+        type: 'bar',
+        data: [
+          fulfillment.created || 0,
+          fulfillment.confirmed || 0,
+          fulfillment.completed || 0,
+          fulfillment.cancelled || 0
+        ],
+        itemStyle: { color: '#409eff' }
+      }],
+      grid: { left: 50, right: 20, top: 30, bottom: 30 }
+    })
+
+    const timing = fulfillmentRes.data?.timing_hours || {}
+    fulfillmentTimingRows.value = [
+      {
+        type: '教材',
+        avg_confirm_hours: timing.textbook?.avg_confirm_hours || 0,
+        avg_complete_hours: timing.textbook?.avg_complete_hours || 0
+      },
+      {
+        type: '资料',
+        avg_confirm_hours: timing.resource?.avg_confirm_hours || 0,
+        avg_complete_hours: timing.resource?.avg_complete_hours || 0
+      }
+    ]
 
     window.addEventListener('resize', resizeAll)
   } catch (e) { console.error(e) }

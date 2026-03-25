@@ -5,6 +5,14 @@
         <div class="header">
           <h2>📦 我的教材</h2>
           <div class="header-actions">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="按书名/作者/ISBN搜索我的教材"
+              clearable
+              style="width: 260px;"
+              @keyup.enter="loadData"
+              @clear="loadData"
+            />
             <el-upload
               :show-file-list="false"
               accept=".xlsx,.csv"
@@ -68,12 +76,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteTextbook, getMyTextbooks, importMyTextbooks } from '../api/modules'
+import { deleteTextbook, getMyTextbooks, importMyTextbooks, exportMyTextbooks } from '../api/modules'
 
 const textbooks = ref([])
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
+const searchKeyword = ref('')
 
 const getStatusType = (s) => ({
   pending_review: 'warning', approved: 'success', rejected: 'danger',
@@ -85,7 +94,9 @@ onMounted(() => loadData())
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getMyTextbooks({ page: page.value })
+    const params = { page: page.value }
+    if (searchKeyword.value.trim()) params.q = searchKeyword.value.trim()
+    const res = await getMyTextbooks(params)
     textbooks.value = res.data.results || res.data
     total.value = res.data.count || textbooks.value.length
   } catch {} finally {
@@ -113,50 +124,15 @@ const downloadBlob = (blob, filename) => {
   window.URL.revokeObjectURL(url)
 }
 
-const toCsvCell = (value) => {
-  const text = String(value ?? '')
-  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-    return `"${text.replace(/"/g, '""')}"`
-  }
-  return text
-}
-
 const handleExport = async (format) => {
   try {
-    const rows = []
-    let current = 1
-    let hasNext = true
-    while (hasNext) {
-      const res = await getMyTextbooks({ page: current })
-      const data = res.data?.results || res.data || []
-      rows.push(...data)
-      hasNext = Boolean(res.data?.next)
-      current += 1
-      if (!res.data?.results) break
-    }
-
-    const headers = ['id', 'title', 'author', 'isbn', 'publisher', 'edition', 'transaction_type', 'price', 'status', 'created_at']
-    const csvLines = [headers.join(',')]
-    rows.forEach((item) => {
-      csvLines.push([
-        toCsvCell(item.id),
-        toCsvCell(item.title),
-        toCsvCell(item.author),
-        toCsvCell(item.isbn),
-        toCsvCell(item.publisher),
-        toCsvCell(item.edition),
-        toCsvCell(item.transaction_type),
-        toCsvCell(item.price),
-        toCsvCell(item.status),
-        toCsvCell(item.created_at)
-      ].join(','))
+    const res = await exportMyTextbooks({
+      format,
+      q: searchKeyword.value.trim() || undefined
     })
-
-    const blob = new Blob([`\ufeff${csvLines.join('\n')}`], { type: 'text/csv;charset=utf-8' })
-    if (format === 'xlsx') {
-      ElMessage.warning('当前环境将导出为 CSV，可直接用 Excel 打开')
-    }
-    downloadBlob(blob, 'my_textbooks.csv')
+    const blob = res.data
+    const filename = format === 'xlsx' ? 'my_textbooks.xlsx' : 'my_textbooks.csv'
+    downloadBlob(blob, filename)
   } catch {
     ElMessage.error('导出失败，请稍后重试')
   }

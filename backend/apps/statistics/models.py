@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -8,12 +9,12 @@ User = get_user_model()
 class SellerRating(models.Model):
     """卖家评分记录"""
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_ratings')
-    rater = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='given_ratings')
+    rater = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_ratings')
     score = models.DecimalField(
         '评分',
         max_digits=3,
         decimal_places=1,
-        validators=[MinValueValidator(0), MaxValueValidator(5)]
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('5'))]
     )
     comment = models.CharField('评价内容', max_length=200, blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
@@ -26,5 +27,4 @@ class SellerRating(models.Model):
         unique_together = ('seller', 'rater')  # 每个卖家只能被某个评价者评一次
 
     def __str__(self):
-        rater_name = self.rater.username if self.rater else '系统'
-        return f'{rater_name} → {self.seller.username}: {self.score}分'
+        return f'{self.rater.username} → {self.seller.username}: {self.score}分'

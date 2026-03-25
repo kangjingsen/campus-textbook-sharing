@@ -5,9 +5,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db.models import Q, F, Count, Sum, Case, When, IntegerField
+from django.db.models import Q, F, Count, Sum, Case, When, IntegerField, Avg
+from django.db import IntegrityError
 
-from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource, ResourceOrder
+from .models import Category, Textbook, TextbookVote, TextbookRating, TextbookComment, SharedResource, ResourceOrder
 from .serializers import (
     CategorySerializer, CategoryFlatSerializer,
     TextbookListSerializer, TextbookDetailSerializer, TextbookCreateSerializer,
@@ -21,6 +22,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal, InvalidOperation
 import csv
 import io
+
+
+CANCEL_REASONS = {item[0] for item in ResourceOrder.CANCEL_REASON_CHOICES}
 
 
 class CategoryTreeView(generics.ListAPIView):
@@ -66,7 +70,7 @@ class TextbookListView(generics.ListAPIView):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        qs = Textbook.objects.filter(status='approved')
+        qs = Textbook.objects.filter(status__in=['approved', 'sold', 'rented', 'completed'])
         # 价格区间过滤
         min_price = self.request.query_params.get('min_price')
         max_price = self.request.query_params.get('max_price')
@@ -87,7 +91,7 @@ class TextbookSearchView(APIView):
             return Response({'results': []})
 
         queryset = Textbook.objects.filter(
-            status='approved'
+            status__in=['approved', 'sold', 'rented', 'completed']
         ).filter(
             Q(title__icontains=keyword) |
             Q(author__icontains=keyword) |
@@ -159,7 +163,16 @@ class MyTextbookListView(generics.ListAPIView):
     serializer_class = TextbookListSerializer
 
     def get_queryset(self):
-        return Textbook.objects.filter(owner=self.request.user)
+        queryset = Textbook.objects.filter(owner=self.request.user)
+        keyword = (self.request.query_params.get('q') or '').strip()
+        if keyword:
+            queryset = queryset.filter(
+                Q(title__icontains=keyword) |
+                Q(author__icontains=keyword) |
+                Q(isbn__icontains=keyword) |
+                Q(publisher__icontains=keyword)
+            )
+        return queryset.order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
         export_flag = str(request.query_params.get('export', '')).lower()
@@ -180,6 +193,14 @@ class TextbookBulkExportView(APIView):
 
         export_format = request.query_params.get('format', 'xlsx').lower()
         queryset = Textbook.objects.filter(owner=request.user).order_by('-created_at')
+        keyword = (request.query_params.get('q') or '').strip()
+        if keyword:
+            queryset = queryset.filter(
+                Q(title__icontains=keyword) |
+                Q(author__icontains=keyword) |
+                Q(isbn__icontains=keyword) |
+                Q(publisher__icontains=keyword)
+            )
 
         headers = [
             'id', 'title', 'author', 'isbn', 'publisher', 'edition',
@@ -444,6 +465,80 @@ class TextbookVoteView(APIView):
         return Response({'action': action, 'likes': likes, 'dislikes': dislikes, 'my_vote': my_vote})
 
 
+class TextbookRatingView(APIView):
+    """教材星级评分（可修改、可取消）"""
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get(self, request, pk):
+        rating_qs = TextbookRating.objects.filter(textbook_id=pk)
+        avg_value = rating_qs.aggregate(avg=Avg('score'))['avg']
+        my_rating = 0
+        if request.user.is_authenticated:
+            mine = rating_qs.filter(user=request.user).first()
+            if mine:
+                my_rating = int(mine.score)
+        return Response({
+            'avg_score': round(float(avg_value), 2) if avg_value is not None else 0,
+            'rating_count': rating_qs.count(),
+            'my_rating': my_rating,
+        })
+
+    def post(self, request, pk):
+        score = request.data.get('score')
+        try:
+            score = int(score)
+        except (TypeError, ValueError):
+            return Response({'error': 'score 必须为 0-5 的整数'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if score < 0 or score > 5:
+            return Response({'error': 'score 必须为 0-5 的整数'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            textbook = Textbook.objects.get(pk=pk)
+        except Textbook.DoesNotExist:
+            return Response({'error': '教材不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if textbook.owner_id == request.user.id:
+            return Response({'error': '不能给自己的教材评分'}, status=status.HTTP_400_BAD_REQUEST)
+
+        existing = TextbookRating.objects.filter(textbook_id=pk, user=request.user).first()
+
+        # score=0 或重复点击同分值 -> 取消评分
+        if existing and (score == 0 or existing.score == score):
+            existing.delete()
+            action = 'cancelled'
+            my_rating = 0
+        elif existing:
+            existing.score = score
+            existing.save(update_fields=['score'])
+            action = 'updated'
+            my_rating = score
+        else:
+            if score == 0:
+                return Response({'error': '当前尚未评分，无法取消'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                TextbookRating.objects.create(textbook_id=pk, user=request.user, score=score)
+            except IntegrityError:
+                return Response({'error': '评分提交失败，请重试'}, status=status.HTTP_400_BAD_REQUEST)
+            action = 'created'
+            my_rating = score
+
+        qs = TextbookRating.objects.filter(textbook_id=pk)
+        avg_value = qs.aggregate(avg=Avg('score'))['avg']
+        count = qs.count()
+        return Response({
+            'message': '评分已更新' if action in ('updated', 'created') else '评分已取消',
+            'action': action,
+            'avg_score': round(float(avg_value), 2) if avg_value is not None else 0,
+            'rating_count': count,
+            'my_rating': my_rating,
+        }, status=status.HTTP_200_OK)
+
+
 # ============= 评论 =============
 
 class TextbookCommentListView(generics.ListCreateAPIView):
@@ -509,6 +604,115 @@ class SharedResourceListView(generics.ListCreateAPIView):
             'message': '资料上传成功',
             'resource': SharedResourceSerializer(resource).data
         }, status=status.HTTP_201_CREATED)
+
+
+class MySharedResourceListView(generics.ListAPIView):
+    """我上传的在线资料"""
+    serializer_class = SharedResourceSerializer
+
+    def get_queryset(self):
+        queryset = SharedResource.objects.filter(uploader=self.request.user)
+        keyword = (self.request.query_params.get('q') or '').strip()
+        if keyword:
+            queryset = queryset.filter(
+                Q(title__icontains=keyword) |
+                Q(description__icontains=keyword) |
+                Q(category__name__icontains=keyword)
+            )
+        sale_type = self.request.query_params.get('sale_type')
+        if sale_type:
+            queryset = queryset.filter(sale_type=sale_type)
+        resource_type = self.request.query_params.get('resource_type')
+        if resource_type:
+            queryset = queryset.filter(resource_type=resource_type)
+        return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        export_flag = str(request.query_params.get('export', '')).lower()
+        if export_flag in ('1', 'true', 'yes'):
+            export_view = MySharedResourceExportView()
+            export_view.request = request
+            return export_view.get(request)
+        return super().list(request, *args, **kwargs)
+
+
+class MySharedResourceExportView(APIView):
+    """批量导出我的在线资料（csv/xlsx）"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        export_format = request.query_params.get('format', 'xlsx').lower()
+        queryset = SharedResource.objects.filter(uploader=request.user).order_by('-created_at')
+
+        keyword = (request.query_params.get('q') or '').strip()
+        if keyword:
+            queryset = queryset.filter(
+                Q(title__icontains=keyword) |
+                Q(description__icontains=keyword) |
+                Q(category__name__icontains=keyword)
+            )
+
+        sale_type = request.query_params.get('sale_type')
+        if sale_type:
+            queryset = queryset.filter(sale_type=sale_type)
+
+        resource_type = request.query_params.get('resource_type')
+        if resource_type:
+            queryset = queryset.filter(resource_type=resource_type)
+
+        headers = [
+            'id', 'title', 'description', 'resource_type', 'resource_type_display',
+            'sale_type', 'sale_type_display', 'price', 'category_id', 'category_name',
+            'download_count', 'file_size', 'created_at'
+        ]
+        rows = []
+        for item in queryset:
+            rows.append([
+                item.id,
+                item.title,
+                item.description,
+                item.resource_type,
+                item.get_resource_type_display(),
+                item.sale_type,
+                item.get_sale_type_display(),
+                float(item.price or 0),
+                item.category_id or '',
+                item.category.name if item.category else '',
+                int(item.download_count or 0),
+                int(item.file_size or 0),
+                item.created_at.strftime('%Y-%m-%d %H:%M:%S') if item.created_at else ''
+            ])
+
+        if export_format == 'csv':
+            response = HttpResponse(content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = 'attachment; filename="my_resources.csv"'
+            response.write('\ufeff')
+            writer = csv.writer(response)
+            writer.writerow(headers)
+            writer.writerows(rows)
+            return response
+
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            return Response({'error': '当前环境缺少 openpyxl，暂不支持 xlsx 导出，请改用 format=csv'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'resources'
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="my_resources.xlsx"'
+        return response
 
 
 class SharedResourceDetailView(generics.RetrieveDestroyAPIView):
@@ -697,6 +901,13 @@ class ResourceOrderCancelView(APIView):
         except ResourceOrder.DoesNotExist:
             return Response({'error': '订单不存在或无法取消'}, status=status.HTTP_404_NOT_FOUND)
 
+        reason = str(request.data.get('reason', '') or '').strip()
+        if reason not in CANCEL_REASONS:
+            return Response({'error': '取消原因无效，请选择预设原因'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cancel_by_role = 'buyer' if order.buyer_id == request.user.id else 'seller'
         order.status = 'cancelled'
-        order.save(update_fields=['status', 'updated_at'])
+        order.cancel_reason = reason
+        order.cancel_by_role = cancel_by_role
+        order.save(update_fields=['status', 'cancel_reason', 'cancel_by_role', 'updated_at'])
         return Response({'message': '已取消'})

@@ -3,11 +3,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.db.models import Q
+from django.db import transaction
 from datetime import timedelta
 
 from apps.textbooks.models import Textbook
 from .models import Order
 from .serializers import OrderSerializer, OrderCreateSerializer
+
+
+CANCEL_REASONS = {item[0] for item in Order.CANCEL_REASON_CHOICES}
 
 
 def auto_complete_expired_orders_for_user(user):
@@ -37,32 +41,45 @@ class OrderCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         textbook_id = serializer.validated_data['textbook_id']
-        try:
-            textbook = Textbook.objects.get(pk=textbook_id, status='approved')
-        except Textbook.DoesNotExist:
-            return Response({'error': '教材不存在或已下架'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                textbook = Textbook.objects.select_for_update().get(pk=textbook_id)
+            except Textbook.DoesNotExist:
+                return Response({'error': '教材不存在或已下架'}, status=status.HTTP_404_NOT_FOUND)
 
-        if textbook.owner == request.user:
-            return Response({'error': '不能购买自己的教材'}, status=status.HTTP_400_BAD_REQUEST)
+            if textbook.status != 'approved':
+                return Response({'error': '教材不存在或已下架'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 检查是否已有未完成的订单
-        existing = Order.objects.filter(
-            textbook=textbook, buyer=request.user,
-            status__in=['pending', 'confirmed']
-        ).exists()
-        if existing:
-            return Response({'error': '您已有该教材的未完成订单'}, status=status.HTTP_400_BAD_REQUEST)
+            if textbook.owner == request.user:
+                return Response({'error': '不能购买自己的教材'}, status=status.HTTP_400_BAD_REQUEST)
 
-        order = Order.objects.create(
-            textbook=textbook,
-            buyer=request.user,
-            seller=textbook.owner,
-            transaction_type=textbook.transaction_type,
-            price=textbook.price,
-            note=serializer.validated_data.get('note', ''),
-            rent_start_date=serializer.validated_data.get('rent_start_date'),
-            rent_end_date=serializer.validated_data.get('rent_end_date'),
-        )
+            active_exists = Order.objects.filter(
+                textbook=textbook,
+                status__in=['pending', 'confirmed']
+            ).exists()
+            if active_exists:
+                return Response({'error': '该教材已有进行中的订单，暂不可下单'}, status=status.HTTP_400_BAD_REQUEST)
+
+            existing = Order.objects.filter(
+                textbook=textbook, buyer=request.user,
+                status__in=['pending', 'confirmed']
+            ).exists()
+            if existing:
+                return Response({'error': '您已有该教材的未完成订单'}, status=status.HTTP_400_BAD_REQUEST)
+
+            order = Order.objects.create(
+                textbook=textbook,
+                buyer=request.user,
+                seller=textbook.owner,
+                transaction_type=textbook.transaction_type,
+                price=textbook.price,
+                note=serializer.validated_data.get('note', ''),
+                rent_start_date=serializer.validated_data.get('rent_start_date'),
+                rent_end_date=serializer.validated_data.get('rent_end_date'),
+            )
+
+            textbook.status = 'rented' if textbook.transaction_type == 'rent' else 'sold'
+            textbook.save(update_fields=['status'])
 
         return Response({
             'message': '订单创建成功',
@@ -148,15 +165,36 @@ class OrderCancelView(APIView):
     """取消订单"""
 
     def post(self, request, pk):
-        try:
-            order = Order.objects.get(pk=pk, status__in=['pending', 'confirmed'])
-            if order.buyer != request.user and order.seller != request.user:
-                raise Order.DoesNotExist
-        except Order.DoesNotExist:
-            return Response({'error': '订单不存在或无法取消'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_related('textbook').select_for_update().get(
+                    pk=pk, status__in=['pending', 'confirmed']
+                )
+                if order.buyer != request.user and order.seller != request.user:
+                    raise Order.DoesNotExist
+            except Order.DoesNotExist:
+                return Response({'error': '订单不存在或无法取消'}, status=status.HTTP_404_NOT_FOUND)
 
-        order.status = 'cancelled'
-        order.save(update_fields=['status', 'updated_at'])
+            reason = str(request.data.get('reason', '') or '').strip()
+            if reason not in CANCEL_REASONS:
+                return Response({'error': '取消原因无效，请选择预设原因'}, status=status.HTTP_400_BAD_REQUEST)
+
+            textbook = Textbook.objects.select_for_update().get(pk=order.textbook_id)
+            has_active = Order.objects.filter(
+                textbook_id=textbook.id,
+                status__in=['pending', 'confirmed']
+            ).exclude(pk=order.pk).exists()
+
+            cancel_by_role = 'buyer' if order.buyer_id == request.user.id else 'seller'
+            order.status = 'cancelled'
+            order.cancel_reason = reason
+            order.cancel_by_role = cancel_by_role
+            order.save(update_fields=['status', 'cancel_reason', 'cancel_by_role', 'updated_at'])
+
+            if not has_active and textbook.status in ['sold', 'rented']:
+                textbook.status = 'approved'
+                textbook.save(update_fields=['status'])
+
         return Response({'message': '订单已取消'})
 
 

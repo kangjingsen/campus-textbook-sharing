@@ -21,11 +21,15 @@ urlpatterns = [
     path('admin/<int:pk>/delete/', views.AdminTextbookDeleteView.as_view(), name='admin_textbook_delete'),
     # 点赞/点踩
     path('<int:pk>/vote/', views.TextbookVoteView.as_view(), name='textbook_vote'),
+    # 教材评分
+    path('<int:pk>/rating/', views.TextbookRatingView.as_view(), name='textbook_rating'),
     # 评论
     path('<int:pk>/comments/', views.TextbookCommentListView.as_view(), name='textbook_comments'),
     path('comments/<int:pk>/delete/', views.TextbookCommentDeleteView.as_view(), name='comment_delete'),
     # 在线资料共享区
     path('resources/', views.SharedResourceListView.as_view(), name='resource_list'),
+    path('resources/my/', views.MySharedResourceListView.as_view(), name='my_resource_list'),
+    path('resources/my/export/', views.MySharedResourceExportView.as_view(), name='my_resource_export'),
     path('resources/<int:pk>/', views.SharedResourceDetailView.as_view(), name='resource_detail'),
     path('resources/<int:pk>/download/', views.SharedResourceDownloadView.as_view(), name='resource_download'),
     path('resources/orders/create/', views.ResourceOrderCreateView.as_view(), name='resource_order_create'),

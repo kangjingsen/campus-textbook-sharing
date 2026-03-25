@@ -24,11 +24,15 @@
 - 🎯 推荐增强（支持心愿关键词多字段匹配，过滤本人教材，避免缓存滞后）
 - 👤 个人中心、浏览历史
 - 👍 教材点赞/点踩
+- ⭐ 教材星级评分（支持修改与取消）
 - 💬 教材评论（支持嵌套回复）
 - 📂 在线资料共享区（上传/下载/管理电子资料）
 - 🧾 在线资料售卖（资料订单、卖家确认后上传支付二维码图片、支付后下载）
+- 📁 我的在线资料（独立列表、筛选、CSV/XLSX 导出）
 - 📊 我的统计分析（个人数据概览、积压排行、需求排行）
+- 🧭 我的教材转化漏斗（在架→被下单→确认→完成→取消）
 - 📋 教材批量导入导出（CSV/XLSX 格式）
+- 📝 订单取消原因必填（买卖双方均可发起，记录取消方角色）
 - 🏛 论坛问答社区（讨论/问答帖、最佳回答标记、浏览统计）
 - 🙋 个人中心我的帖子（查看本人发帖并一键跳转论坛详情）
 - 👤 帖子作者主页跳转（从帖子直接进入用户主页）
@@ -44,12 +48,19 @@
 - 📈 多维统计分析（流通率、价格趋势、学院需求、热门排行等）- 支持统一筛选快速切换
 - 🏆 售卖排行榜、需求排行榜、优秀商家
 - 📉 取消订单专题分析（取消率趋势、高取消分类/卖家）
+- 🧾 取消原因分布与买卖方取消占比分析
+- ⏱ 履约漏斗与时效分析（教材订单 + 资料订单）
 - 📊 价格统计增强（价格指数、环比、同比、最大最小值、中位数、平均数）
 - 📋 论坛与公告管理（创建/编辑/删除公告与帖子）
 
 ## 关键修复与优化
 
 - **商家完成率计算修复**: 完成率从包含所有订单状态改为仅根据已定论订单（completed/cancelled/returned），排除待确认(pending)和已确认(confirmed)订单，使数据分布从极端(0%-100%)改为合理(25%-91%)
+- **并发下单修复**: 下单与取消流程引入事务+行级锁，避免同一本教材并发重复下单
+- **取消回架修复**: 取消订单时先判断是否仍存在进行中订单，避免错误回架
+- **评分机制升级**:
+	- 商家评分：同一用户可重复提交，按“更新”处理
+	- 教材评分：支持创建/修改/取消（传 `0` 或重复同分值可取消）
 
 ## 核心算法
 
@@ -135,6 +146,10 @@ python manage.py create_userx_accounts
 python manage.py rebalance_demo_data --users 24
 # 仅预览，不写入数据库
 python manage.py rebalance_demo_data --users 24 --dry-run
+
+# 11) 历史订单适配（补齐取消原因/取消方，并按历史订单修正教材状态）
+python manage.py adapt_legacy_orders --dry-run
+python manage.py adapt_legacy_orders
 ```
 
 **expand_textbooks_real 参数说明:**
@@ -194,12 +209,14 @@ textbook-sharing/
 | 用户 | `/api/users/` | 注册、登录、个人信息、忘记密码、重置密码 |
 | 教材 | `/api/textbooks/` | CRUD、搜索、我的教材、点赞点踩、评论 |
 | 资料 | `/api/textbooks/resources/` | 在线资料上传、下载、删除 |
+| 我的资料 | `/api/textbooks/resources/my/` | 我的在线资料列表与导出（`export=1`） |
 | 订单 | `/api/orders/` | 下单、确认、完成、取消 |
 | 消息 | `/api/messages/` | 会话、消息、未读数 |
 | 审核 | `/api/reviews/` | 待审列表、审核操作 |
 | 推荐 | `/api/recommendations/` | 个性化推荐、热门 |
 | 心愿单 | `/api/recommendations/wishlist/` | 心愿单增删改查 |
 | 统计 | `/api/statistics/` | 多维统计数据（含热门教材排行、优秀商家评分排行） |
+| 评分 | `/api/textbooks/<id>/rating/`、`/api/statistics/seller-ratings/*` | 教材评分、商家评分 |
 | 资料订单 | `/api/textbooks/resources/orders/` | 资料订单创建、确认、支付完成、取消 |
 | WebSocket | `ws://host/ws/chat/<id>/` | 实时聊天 |
 
@@ -210,6 +227,22 @@ textbook-sharing/
 - `/api/statistics/popular-detail/?rank_type=views|orders|comprehensive&limit=15`
 - `/api/statistics/top-sellers-rating/?limit=12`
 - `/api/statistics/user-insights/?limit=10`（用户端含热门教材与优秀商家评分榜）
+- `/api/statistics/fulfillment-insights/`（履约漏斗与平均时效）
+- `/api/statistics/cancellation-insights/`（含取消原因分布、取消方占比）
+
+## 测试建议
+
+```bash
+cd backend
+python manage.py test tests.test_order_and_stats_logic -v 1
+```
+
+当前回归覆盖：
+- 下单后教材不可重复下单
+- 取消订单时若仍有进行中订单，不回架
+- 用户漏斗统计口径包含非 `approved` 的自有教材
+- 商家评分同用户重复提交应更新
+- 教材评分支持创建/更新/取消
 
 ## 环境变量
 

@@ -43,6 +43,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item command="my-textbooks">我的教材</el-dropdown-item>
+                <el-dropdown-item command="my-resources">我的资料</el-dropdown-item>
                 <el-dropdown-item command="wishlist">我的心愿单</el-dropdown-item>
                 <el-dropdown-item command="statistics">统计分析</el-dropdown-item>
                 <el-dropdown-item v-if="userStore.isAdmin" command="admin" divided>管理后台</el-dropdown-item>
@@ -164,6 +165,7 @@ const handleCommand = (cmd) => {
   switch (cmd) {
     case 'profile': router.push('/profile'); break
     case 'my-textbooks': router.push('/my-textbooks'); break
+    case 'my-resources': router.push('/my-resources'); break
     case 'wishlist': router.push('/wishlist'); break
     case 'statistics': router.push('/statistics'); break
     case 'admin': router.push('/admin'); break

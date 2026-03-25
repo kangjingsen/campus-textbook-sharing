@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Category, Textbook, TextbookVote, TextbookComment, SharedResource, ResourceOrder
+from django.db.models import Avg
+from .models import Category, Textbook, TextbookVote, TextbookRating, TextbookComment, SharedResource, ResourceOrder
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -40,6 +41,8 @@ class TextbookListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     likes_count = serializers.SerializerMethodField()
     dislikes_count = serializers.SerializerMethodField()
+    rating_avg = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Textbook
@@ -50,7 +53,7 @@ class TextbookListSerializer(serializers.ModelSerializer):
                   'cover_image', 'view_count',
                   'owner', 'owner_name', 'owner_college',
                   'category', 'category_name',
-                  'likes_count', 'dislikes_count',
+                  'likes_count', 'dislikes_count', 'rating_avg', 'rating_count',
                   'created_at']
 
     def get_likes_count(self, obj):
@@ -58,6 +61,13 @@ class TextbookListSerializer(serializers.ModelSerializer):
 
     def get_dislikes_count(self, obj):
         return obj.votes.filter(vote=-1).count()
+
+    def get_rating_avg(self, obj):
+        value = obj.ratings.aggregate(avg=Avg('score'))['avg']
+        return round(float(value), 2) if value is not None else 0
+
+    def get_rating_count(self, obj):
+        return obj.ratings.count()
 
 
 class TextbookDetailSerializer(serializers.ModelSerializer):
@@ -68,11 +78,28 @@ class TextbookDetailSerializer(serializers.ModelSerializer):
     transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
     condition_display = serializers.CharField(source='get_condition_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    rating_avg = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
+    my_rating = serializers.SerializerMethodField()
 
     class Meta:
         model = Textbook
         fields = '__all__'
         read_only_fields = ['owner', 'status', 'view_count', 'created_at', 'updated_at']
+
+    def get_rating_avg(self, obj):
+        value = obj.ratings.aggregate(avg=Avg('score'))['avg']
+        return round(float(value), 2) if value is not None else 0
+
+    def get_rating_count(self, obj):
+        return obj.ratings.count()
+
+    def get_my_rating(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 0
+        rating = TextbookRating.objects.filter(textbook=obj, user=request.user).first()
+        return int(rating.score) if rating else 0
 
 
 class TextbookCreateSerializer(serializers.ModelSerializer):
@@ -199,12 +226,16 @@ class ResourceOrderSerializer(serializers.ModelSerializer):
     buyer_name = serializers.CharField(source='buyer.username', read_only=True)
     seller_name = serializers.CharField(source='seller.username', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    cancel_reason_display = serializers.CharField(source='get_cancel_reason_display', read_only=True)
+    cancel_by_role_display = serializers.CharField(source='get_cancel_by_role_display', read_only=True)
 
     class Meta:
         model = ResourceOrder
         fields = [
             'id', 'resource', 'resource_title', 'buyer', 'buyer_name', 'seller', 'seller_name',
-            'price', 'status', 'status_display', 'payment_qr', 'payment_qr_image', 'payment_proof', 'note',
+            'price', 'status', 'status_display',
+            'payment_qr', 'payment_qr_image', 'payment_proof', 'note',
+            'cancel_reason', 'cancel_reason_display', 'cancel_by_role', 'cancel_by_role_display',
             'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at'
         ]
         read_only_fields = ['id', 'buyer', 'seller', 'price', 'created_at', 'updated_at', 'confirmed_at', 'paid_at', 'completed_at']

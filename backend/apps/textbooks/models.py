@@ -96,6 +96,23 @@ class TextbookVote(models.Model):
         unique_together = ('textbook', 'user')
 
 
+class TextbookRating(models.Model):
+    """教材星级评分（1-5分）"""
+    textbook = models.ForeignKey(Textbook, on_delete=models.CASCADE, related_name='ratings', verbose_name='教材')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='textbook_ratings', verbose_name='用户')
+    score = models.PositiveSmallIntegerField('评分')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'textbook_ratings'
+        verbose_name = '教材评分'
+        verbose_name_plural = verbose_name
+        unique_together = ('textbook', 'user')
+
+    def __str__(self):
+        return f'{self.user.username} -> {self.textbook.title}: {self.score}'
+
+
 class TextbookComment(models.Model):
     """教材评论"""
     textbook = models.ForeignKey(Textbook, on_delete=models.CASCADE, related_name='comments', verbose_name='教材')
@@ -162,6 +179,21 @@ class ResourceOrder(models.Model):
         ('cancelled', '已取消'),
     )
 
+    CANCEL_REASON_CHOICES = (
+        ('price', '价格不合适'),
+        ('schedule', '无法线下交易'),
+        ('duplicate', '重复下单'),
+        ('not_needed', '暂时不需要'),
+        ('unresponsive', '对方长时间未响应'),
+        ('other', '其他'),
+    )
+
+    CANCEL_BY_CHOICES = (
+        ('buyer', '买家'),
+        ('seller', '卖家'),
+        ('system', '系统'),
+    )
+
     resource = models.ForeignKey(SharedResource, on_delete=models.CASCADE,
                                  related_name='orders', verbose_name='资料')
     buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -174,6 +206,8 @@ class ResourceOrder(models.Model):
     payment_qr_image = models.ImageField('支付二维码图片', upload_to='payment_qr/', blank=True, null=True)
     payment_proof = models.ImageField('支付凭证', upload_to='payment_proofs/', blank=True, null=True)
     note = models.TextField('备注', blank=True, default='')
+    cancel_reason = models.CharField('取消原因', max_length=20, choices=CANCEL_REASON_CHOICES, blank=True, default='')
+    cancel_by_role = models.CharField('取消发起方', max_length=10, choices=CANCEL_BY_CHOICES, blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
     confirmed_at = models.DateTimeField('确认时间', null=True, blank=True)

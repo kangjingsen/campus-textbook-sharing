@@ -13,6 +13,21 @@ class Order(models.Model):
         ('returned', '已归还'),
     )
 
+    CANCEL_REASON_CHOICES = (
+        ('price', '价格不合适'),
+        ('schedule', '无法线下交易'),
+        ('duplicate', '重复下单'),
+        ('not_needed', '暂时不需要'),
+        ('unresponsive', '对方长时间未响应'),
+        ('other', '其他'),
+    )
+
+    CANCEL_BY_CHOICES = (
+        ('buyer', '买家'),
+        ('seller', '卖家'),
+        ('system', '系统'),
+    )
+
     order_no = models.CharField('订单号', max_length=32, unique=True, editable=False)
     textbook = models.ForeignKey('textbooks.Textbook', on_delete=models.CASCADE,
                                  related_name='orders', verbose_name='教材')
@@ -26,6 +41,8 @@ class Order(models.Model):
     rent_start_date = models.DateField('租赁开始日期', null=True, blank=True)
     rent_end_date = models.DateField('租赁结束日期', null=True, blank=True)
     note = models.TextField('备注', blank=True, default='')
+    cancel_reason = models.CharField('取消原因', max_length=20, choices=CANCEL_REASON_CHOICES, blank=True, default='')
+    cancel_by_role = models.CharField('取消发起方', max_length=10, choices=CANCEL_BY_CHOICES, blank=True, default='')
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
     started_at = models.DateTimeField('开始时间', null=True, blank=True)

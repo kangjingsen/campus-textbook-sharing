@@ -7,13 +7,29 @@ from django.utils import timezone
 from datetime import timedelta
 from statistics import median
 
-from apps.textbooks.models import Textbook, Category
+from apps.textbooks.models import Textbook, Category, SharedResource
 from apps.textbooks.models import ResourceOrder
 from apps.orders.models import Order
 from apps.users.models import User
 from apps.recommendations.models import WishlistItem
 from apps.statistics.models import SellerRating
 from utils.permissions import IsAdmin
+
+
+def _td_hours(td):
+    if not td:
+        return 0
+    return round(td.total_seconds() / 3600, 2)
+
+
+CANCEL_REASON_LABELS = {
+    'price': '价格不合适',
+    'schedule': '无法线下交易',
+    'duplicate': '重复下单',
+    'not_needed': '暂时不需要',
+    'unresponsive': '对方长时间未响应',
+    'other': '其他',
+}
 
 
 class DashboardOverviewView(APIView):
@@ -688,14 +704,128 @@ class CancellationInsightsView(APIView):
             status='cancelled', created_at__gte=start_date
         ).count()
 
+        textbook_reason_data = Order.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
+            reason=F('cancel_reason')
+        ).annotate(count=Count('id'))
+
+        resource_reason_data = ResourceOrder.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(
+            reason=F('cancel_reason')
+        ).annotate(count=Count('id'))
+
+        reason_map = {}
+        for item in textbook_reason_data:
+            key = item['reason'] or '未填写'
+            reason_map[key] = reason_map.get(key, 0) + item['count']
+        for item in resource_reason_data:
+            key = item['reason'] or '未填写'
+            reason_map[key] = reason_map.get(key, 0) + item['count']
+
+        by_reason = sorted(
+            [{'reason_code': key, 'reason': CANCEL_REASON_LABELS.get(key, key), 'count': value} for key, value in reason_map.items()],
+            key=lambda x: x['count'],
+            reverse=True
+        )[:limit]
+
+        textbook_role_data = Order.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(role=F('cancel_by_role')).annotate(count=Count('id'))
+        resource_role_data = ResourceOrder.objects.filter(
+            status='cancelled', created_at__gte=start_date
+        ).values(role=F('cancel_by_role')).annotate(count=Count('id'))
+
+        role_map = {'buyer': 0, 'seller': 0}
+        for item in textbook_role_data:
+            if item['role'] in role_map:
+                role_map[item['role']] += item['count']
+        for item in resource_role_data:
+            if item['role'] in role_map:
+                role_map[item['role']] += item['count']
+
         return Response({
             'trend': trend,
             'by_category': by_category,
             'by_seller': by_seller,
+            'by_reason': by_reason,
             'summary': {
                 'textbook_cancelled_orders': textbook_cancel_total,
                 'resource_cancelled_orders': resource_cancel_total,
                 'total_cancelled_orders': textbook_cancel_total + resource_cancel_total
+            },
+            'cancel_by_role': {
+                'buyer': role_map['buyer'],
+                'seller': role_map['seller']
+            }
+        })
+
+
+class FulfillmentInsightsView(APIView):
+    """履约漏斗与时效分析"""
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        textbook_total = Order.objects.count()
+        textbook_confirmed = Order.objects.filter(status__in=['confirmed', 'completed', 'returned']).count()
+        textbook_completed = Order.objects.filter(status__in=['completed', 'returned']).count()
+        textbook_cancelled = Order.objects.filter(status='cancelled').count()
+
+        resource_total = ResourceOrder.objects.count()
+        resource_confirmed = ResourceOrder.objects.filter(status__in=['confirmed', 'paid_pending', 'completed']).count()
+        resource_completed = ResourceOrder.objects.filter(status='completed').count()
+        resource_cancelled = ResourceOrder.objects.filter(status='cancelled').count()
+
+        textbook_confirm_td = Order.objects.filter(started_at__isnull=False).aggregate(
+            avg=Avg(F('started_at') - F('created_at'))
+        )['avg']
+        textbook_complete_td = Order.objects.filter(completed_at__isnull=False).aggregate(
+            avg=Avg(F('completed_at') - F('created_at'))
+        )['avg']
+
+        resource_confirm_td = ResourceOrder.objects.filter(confirmed_at__isnull=False).aggregate(
+            avg=Avg(F('confirmed_at') - F('created_at'))
+        )['avg']
+        resource_complete_td = ResourceOrder.objects.filter(completed_at__isnull=False).aggregate(
+            avg=Avg(F('completed_at') - F('created_at'))
+        )['avg']
+
+        total_total = textbook_total + resource_total
+        total_confirmed = textbook_confirmed + resource_confirmed
+        total_completed = textbook_completed + resource_completed
+        total_cancelled = textbook_cancelled + resource_cancelled
+
+        return Response({
+            'funnel': {
+                'textbook': {
+                    'created': textbook_total,
+                    'confirmed': textbook_confirmed,
+                    'completed': textbook_completed,
+                    'cancelled': textbook_cancelled,
+                },
+                'resource': {
+                    'created': resource_total,
+                    'confirmed': resource_confirmed,
+                    'completed': resource_completed,
+                    'cancelled': resource_cancelled,
+                },
+                'total': {
+                    'created': total_total,
+                    'confirmed': total_confirmed,
+                    'completed': total_completed,
+                    'cancelled': total_cancelled,
+                }
+            },
+            'timing_hours': {
+                'textbook': {
+                    'avg_confirm_hours': _td_hours(textbook_confirm_td),
+                    'avg_complete_hours': _td_hours(textbook_complete_td),
+                },
+                'resource': {
+                    'avg_confirm_hours': _td_hours(resource_confirm_td),
+                    'avg_complete_hours': _td_hours(resource_complete_td),
+                }
             }
         })
 
@@ -708,9 +838,30 @@ class UserInsightsView(APIView):
         user = request.user
         limit = int(request.query_params.get('limit', 10))
 
+        title_count_rows = Textbook.objects.exclude(title='').values('title').annotate(
+            same_title_count=Count('id')
+        )
+        title_count_map = {item['title']: int(item['same_title_count'] or 0) for item in title_count_rows}
+
         my_textbooks_qs = Textbook.objects.filter(owner=user)
         my_active_qs = my_textbooks_qs.filter(status='approved')
         my_completed_orders = Order.objects.filter(seller=user, status='completed')
+        my_resources_qs = SharedResource.objects.filter(uploader=user)
+        my_resource_completed_orders = ResourceOrder.objects.filter(seller=user, status='completed')
+        my_order_qs = Order.objects.filter(seller=user)
+
+        textbook_funnel = {
+            'listed': my_active_qs.count(),
+            'ordered': my_textbooks_qs.filter(
+                orders__status__in=['pending', 'confirmed', 'completed', 'cancelled', 'returned']
+            ).distinct().count(),
+            'confirmed': my_textbooks_qs.filter(
+                Q(orders__status__in=['confirmed', 'completed', 'returned']) |
+                Q(orders__status='cancelled', orders__started_at__isnull=False)
+            ).distinct().count(),
+            'completed': my_textbooks_qs.filter(orders__status__in=['completed', 'returned']).distinct().count(),
+            'cancelled': my_textbooks_qs.filter(orders__status='cancelled').distinct().count(),
+        }
 
         # 积压定义：在架且未完成交易，按在架天数和低浏览优先排序
         backlog_candidates = my_active_qs.annotate(
@@ -726,6 +877,7 @@ class UserInsightsView(APIView):
             backlog_items.append({
                 'textbook_id': tb.id,
                 'title': tb.title,
+                'same_title_count': title_count_map.get(tb.title, 0),
                 'category': tb.category.name if tb.category else '未分类',
                 'price': float(tb.price or 0),
                 'view_count': int(tb.view_count or 0),
@@ -735,7 +887,10 @@ class UserInsightsView(APIView):
                 'suggestion': '建议降价或下架' if days_on_shelf >= 30 else '建议优化标题和描述'
             })
 
-        backlog_items.sort(key=lambda x: (x['backlog_score'], x['days_on_shelf']), reverse=True)
+        backlog_items.sort(
+            key=lambda x: (x['same_title_count'], x['backlog_score'], x['days_on_shelf']),
+            reverse=True
+        )
 
         # 全站需求榜（用户可见精简版）
         wish_data = WishlistItem.objects.filter(status='open').values('title').annotate(
@@ -754,6 +909,7 @@ class UserInsightsView(APIView):
             order_count = int(order_map.get(title, 0))
             demand_rows.append({
                 'title': title,
+                'same_title_count': title_count_map.get(title, 0),
                 'wishlist_count': wishlist_count,
                 'order_count': order_count,
                 'demand_score': wishlist_count * 2 + order_count
@@ -769,6 +925,7 @@ class UserInsightsView(APIView):
             {
                 'textbook_id': tb.id,
                 'title': tb.title,
+                'same_title_count': title_count_map.get(tb.title, 0),
                 'author': tb.author,
                 'view_count': int(tb.view_count or 0),
                 'order_count': int(tb.total_order_count or 0),
@@ -800,8 +957,13 @@ class UserInsightsView(APIView):
                 'my_active_textbooks': my_active_qs.count(),
                 'my_backlog_count': len(backlog_items),
                 'my_completed_orders': my_completed_orders.count(),
+                'my_cancelled_orders': my_order_qs.filter(status='cancelled').count(),
                 'my_sales_amount': float(my_completed_orders.aggregate(total=Sum('price'))['total'] or 0),
+                'my_total_resources': my_resources_qs.count(),
+                'my_resource_completed_orders': my_resource_completed_orders.count(),
+                'my_resource_sales_amount': float(my_resource_completed_orders.aggregate(total=Sum('price'))['total'] or 0),
             },
+            'textbook_funnel': textbook_funnel,
             'backlog_ranking': backlog_items[:limit],
             'demand_ranking': demand_rows[:limit],
             'popular_ranking': popular_rows,
@@ -932,7 +1094,6 @@ class SellerRatingCreateView(APIView):
         if not has_transaction and request.user.role != 'admin' and request.user.role != 'superadmin':
             return Response({'error': '您与该卖家没有交易关系，无法评分'}, status=403)
 
-        # 创建或更新评分
         rating, created = SellerRating.objects.update_or_create(
             seller=seller,
             rater=request.user,

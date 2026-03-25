@@ -139,6 +139,28 @@
         <div v-else>暂无二维码</div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="cancelDialogVisible" title="取消订单原因" width="420px">
+      <el-form label-width="90px">
+        <el-form-item label="订单类型">
+          <span>{{ cancelTargetType === 'resource' ? '资料订单' : '教材订单' }}</span>
+        </el-form-item>
+        <el-form-item label="取消原因" required>
+          <el-select v-model="cancelReason" placeholder="请选择取消原因" style="width: 100%;">
+            <el-option
+              v-for="item in cancelReasonOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelDialogVisible = false">返回</el-button>
+        <el-button type="danger" @click="submitCancel" :loading="cancelSubmitting">确认取消</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -163,6 +185,19 @@ const resourceLoading = ref(false)
 const orderNotifyCount = ref(0)
 const qrVisible = ref(false)
 const currentQr = ref('')
+const cancelDialogVisible = ref(false)
+const cancelSubmitting = ref(false)
+const cancelTargetId = ref(null)
+const cancelTargetType = ref('textbook')
+const cancelReason = ref('')
+const cancelReasonOptions = [
+  { value: 'price', label: '价格不合适' },
+  { value: 'schedule', label: '无法线下交易' },
+  { value: 'duplicate', label: '重复下单' },
+  { value: 'not_needed', label: '暂时不需要' },
+  { value: 'unresponsive', label: '对方长时间未响应' },
+  { value: 'other', label: '其他' }
+]
 let pollTimer = null
 
 const getStatusTag = (s) => ({
@@ -237,10 +272,10 @@ const handleComplete = async (id) => {
 }
 
 const handleCancel = async (id) => {
-  await ElMessageBox.confirm('确认取消订单？', '提示', { type: 'warning' })
-  await cancelOrder(id)
-  ElMessage.success('已取消')
-  loadOrders()
+  cancelTargetType.value = 'textbook'
+  cancelTargetId.value = id
+  cancelReason.value = ''
+  cancelDialogVisible.value = true
 }
 
 const handleReturn = async (id) => {
@@ -311,13 +346,35 @@ const handleSellerCompleteResource = async (id) => {
 }
 
 const handleCancelResource = async (id) => {
+  cancelTargetType.value = 'resource'
+  cancelTargetId.value = id
+  cancelReason.value = ''
+  cancelDialogVisible.value = true
+}
+
+const submitCancel = async () => {
+  if (!cancelReason.value) {
+    ElMessage.warning('请选择取消原因')
+    return
+  }
+  if (!cancelTargetId.value) return
+
+  cancelSubmitting.value = true
   try {
-    await ElMessageBox.confirm('确认取消资料订单？', '提示', { type: 'warning' })
-    await cancelResourceOrder(id)
+    if (cancelTargetType.value === 'resource') {
+      await cancelResourceOrder(cancelTargetId.value, { reason: cancelReason.value })
+      await loadResourceOrders()
+    } else {
+      await cancelOrder(cancelTargetId.value, { reason: cancelReason.value })
+      await loadOrders()
+    }
     ElMessage.success('已取消')
-    await loadResourceOrders()
+    cancelDialogVisible.value = false
     loadOrderNotifications()
-  } catch {}
+  } catch {
+  } finally {
+    cancelSubmitting.value = false
+  }
 }
 
 const showQr = (qr) => {

@@ -24,6 +24,41 @@
           <div class="user-actions" v-if="userStore.isLoggedIn && user.id !== userStore.user?.id">
             <el-button type="primary" @click="handleChat">💬 发消息</el-button>
           </div>
+
+          <div class="seller-rating" v-if="userStore.isLoggedIn && user.id !== userStore.user?.id">
+            <el-divider />
+            <h4>⭐ 商家评分</h4>
+            <p class="rating-summary">均分 {{ sellerAvg }}（{{ sellerCount }} 条）</p>
+            <el-rate v-model="mySellerScore" clearable />
+            <el-input
+              v-model="mySellerComment"
+              type="textarea"
+              :rows="3"
+              maxlength="200"
+              show-word-limit
+              placeholder="可选：填写对交易体验的评价"
+              style="margin-top: 8px;"
+            />
+            <el-button
+              type="warning"
+              style="margin-top: 8px; width: 100%;"
+              :loading="ratingSubmitting"
+              @click="submitSellerRating"
+            >
+              提交/更新评分
+            </el-button>
+            <p class="rating-tip">同一商家可重复提交，系统会更新你的最新评分。</p>
+
+            <div class="rating-list" v-if="sellerRatings.length">
+              <div v-for="item in sellerRatings.slice(0, 3)" :key="item.id" class="rating-item">
+                <div class="rating-item-head">
+                  <span>{{ item.rater_name }}</span>
+                  <el-rate :model-value="item.score" disabled size="small" />
+                </div>
+                <p class="rating-item-comment">{{ item.comment || '未填写评价内容' }}</p>
+              </div>
+            </div>
+          </div>
         </el-card>
       </el-col>
 
@@ -69,7 +104,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { School, Reading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getUserDetail, getUserTextbooks, createConversation } from '../api/modules'
+import {
+  getUserDetail,
+  getUserTextbooks,
+  createConversation,
+  getSellerRatings,
+  createSellerRating
+} from '../api/modules'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -79,6 +120,12 @@ const userStore = useUserStore()
 const user = ref(null)
 const textbooks = ref([])
 const loading = ref(true)
+const sellerAvg = ref(0)
+const sellerCount = ref(0)
+const sellerRatings = ref([])
+const mySellerScore = ref(0)
+const mySellerComment = ref('')
+const ratingSubmitting = ref(false)
 
 const roleLabel = computed(() => {
   const map = { student: '学生', admin: '管理员', superadmin: '超级管理员' }
@@ -105,12 +152,45 @@ onMounted(async () => {
     ])
     user.value = userRes.data
     textbooks.value = textbookRes.data || []
+    if (userStore.isLoggedIn && user.value?.id !== userStore.user?.id) {
+      await loadSellerRatings(user.value.id)
+    }
   } catch {
     ElMessage.error('用户不存在')
   } finally {
     loading.value = false
   }
 })
+
+const loadSellerRatings = async (sellerId) => {
+  const res = await getSellerRatings(sellerId)
+  sellerAvg.value = Number(res.data.avg_score || 0)
+  sellerCount.value = Number(res.data.rating_count || 0)
+  sellerRatings.value = res.data.ratings || []
+  const mine = sellerRatings.value.find((r) => r.rater === userStore.user?.id)
+  mySellerScore.value = mine ? Number(mine.score || 0) : 0
+  mySellerComment.value = mine ? (mine.comment || '') : ''
+}
+
+const submitSellerRating = async () => {
+  if (!mySellerScore.value) {
+    ElMessage.warning('请先选择星级')
+    return
+  }
+  ratingSubmitting.value = true
+  try {
+    await createSellerRating({
+      seller_id: user.value.id,
+      score: mySellerScore.value,
+      comment: mySellerComment.value
+    })
+    ElMessage.success('评分已提交')
+    await loadSellerRatings(user.value.id)
+  } catch {
+  } finally {
+    ratingSubmitting.value = false
+  }
+}
 
 const handleChat = async () => {
   try {
@@ -128,6 +208,14 @@ const handleChat = async () => {
 .user-summary p { color: #606266; font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .user-detail { padding: 0 12px; }
 .user-actions { text-align: center; margin-top: 16px; }
+.seller-rating { margin-top: 8px; }
+.seller-rating h4 { margin: 0 0 6px; font-size: 15px; }
+.rating-summary { margin: 0 0 8px; color: #606266; font-size: 13px; }
+.rating-tip { margin-top: 6px; color: #909399; font-size: 12px; }
+.rating-list { margin-top: 10px; }
+.rating-item { padding: 8px; background: #f5f7fa; border-radius: 6px; margin-bottom: 8px; }
+.rating-item-head { display: flex; justify-content: space-between; align-items: center; }
+.rating-item-comment { margin: 6px 0 0; color: #606266; font-size: 12px; line-height: 1.5; }
 .textbook-card { cursor: pointer; margin-bottom: 16px; border-radius: 8px; }
 .textbook-card:hover { transform: translateY(-2px); transition: 0.3s; }
 .card-cover { position: relative; height: 140px; overflow: hidden; border-radius: 4px; background: #f5f7fa; display: flex; align-items: center; justify-content: center; }
