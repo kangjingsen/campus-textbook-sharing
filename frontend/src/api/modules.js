@@ -172,14 +172,14 @@ export const getSellerRatings = (sellerId) => api.get(`/statistics/seller-rating
 
 
 // 社区（公告/论坛）
-export const getAnnouncements = (params) => api.get('/community/announcements/', { params })
+export const getAnnouncements = (params) => api.get('/community/announcements/', { params, skipAuth: true })
 export const getAnnouncementManageList = (params) => api.get('/community/announcements/manage/', { params })
 export const createAnnouncement = (data) => api.post('/community/announcements/manage/', data)
 export const updateAnnouncement = (id, data) => api.patch(`/community/announcements/manage/${id}/`, data)
 export const deleteAnnouncement = (id) => api.delete(`/community/announcements/manage/${id}/`)
-export const getForumTopics = (params) => api.get('/community/forum/topics/', { params })
+export const getForumTopics = (params, config = {}) => api.get('/community/forum/topics/', { params, ...config })
 export const createForumTopic = (data) => api.post('/community/forum/topics/', data)
-export const getForumTopicDetail = (id) => api.get(`/community/forum/topics/${id}/`)
+export const getForumTopicDetail = (id, config = {}) => api.get(`/community/forum/topics/${id}/`, { ...config })
 export const deleteForumTopic = (id) => api.delete(`/community/forum/topics/${id}/`)
 export const createForumReply = (topicId, data) => api.post(`/community/forum/topics/${topicId}/replies/`, data)
 export const markBestAnswer = (topicId, replyId) => api.post(`/community/forum/topics/${topicId}/best-answer/${replyId}/`)

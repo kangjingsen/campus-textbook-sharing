@@ -11,6 +11,12 @@ const api = axios.create({
 // 请求拦截器：自动附加 JWT
 api.interceptors.request.use(
   config => {
+    if (config.skipAuth) {
+      if (config.headers && config.headers.Authorization) {
+        delete config.headers.Authorization
+      }
+      return config
+    }
     const token = localStorage.getItem('access_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
@@ -27,6 +33,9 @@ api.interceptors.response.use(
     const { response } = error
     if (response) {
       if (response.status === 401) {
+        if (error.config?.skipAuth) {
+          return Promise.reject(error)
+        }
         // 尝试刷新 token
         const refreshToken = localStorage.getItem('refresh_token')
         if (refreshToken && !error.config._retry) {

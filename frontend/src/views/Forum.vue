@@ -244,7 +244,7 @@ const announcementForm = reactive({
 const loadTopics = async () => {
   loading.value = true
   try {
-    const res = await getForumTopics({ topic_type: topicType.value, q: keyword.value })
+    const res = await getForumTopics({ topic_type: topicType.value, q: keyword.value }, { skipAuth: true })
     topics.value = res.data.results || res.data || []
   } finally {
     loading.value = false
@@ -257,6 +257,15 @@ const loadAnnouncements = async () => {
     const res = await req({ page_size: 20 })
     announcements.value = res.data.results || res.data || []
   } catch {
+    if (userStore.isAdmin) {
+      try {
+        const res = await getAnnouncements({ page_size: 20 })
+        announcements.value = res.data.results || res.data || []
+        return
+      } catch {
+        // ignore fallback errors
+      }
+    }
     console.warn('公告加载失败')
   }
 }
@@ -350,7 +359,7 @@ const submitCreate = async () => {
 }
 
 const openDetail = async (id) => {
-  const res = await getForumTopicDetail(id)
+  const res = await getForumTopicDetail(id, { skipAuth: true })
   detail.value = res.data
   detailVisible.value = true
 }
@@ -361,7 +370,7 @@ const submitReply = async () => {
   try {
     await createForumReply(detail.value.id, { content: replyContent.value.trim() })
     replyContent.value = ''
-    const res = await getForumTopicDetail(detail.value.id)
+    const res = await getForumTopicDetail(detail.value.id, { skipAuth: true })
     detail.value = res.data
     await loadTopics()
   } finally {
@@ -410,7 +419,7 @@ const handleMarkBest = async (replyId) => {
   if (!detail.value?.id) return
   await markBestAnswer(detail.value.id, replyId)
   ElMessage.success('已设置最佳回答')
-  const res = await getForumTopicDetail(detail.value.id)
+  const res = await getForumTopicDetail(detail.value.id, { skipAuth: true })
   detail.value = res.data
 }
 

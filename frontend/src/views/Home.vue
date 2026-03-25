@@ -164,12 +164,12 @@ onMounted(async () => {
     popular.value = (res.data.results || res.data).slice(0, 8)
   } catch {}
   try {
-    const [aRes, fRes] = await Promise.all([
+    const [aRes, fRes] = await Promise.allSettled([
       getAnnouncements({ page_size: 4 }),
-      getForumTopics({ page_size: 4 })
+      getForumTopics({ page_size: 4 }, { skipAuth: true })
     ])
-    announcements.value = aRes.data.results || aRes.data || []
-    forumTopics.value = fRes.data.results || fRes.data || []
+    announcements.value = aRes.status === 'fulfilled' ? (aRes.value.data.results || aRes.value.data || []) : []
+    forumTopics.value = fRes.status === 'fulfilled' ? (fRes.value.data.results || fRes.value.data || []) : []
   } catch {}
 
   window.addEventListener('wishlist-updated', loadPersonalizedSection)
