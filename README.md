@@ -267,3 +267,4 @@ python manage.py test tests.test_order_and_stats_logic -v 1
 | DEFAULT_FROM_EMAIL | noreply@textbook-sharing.local | 默认发件人地址 |
 | PASSWORD_RESET_TIMEOUT | 1800 | 重置链接有效期（秒） |
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kangjingsen/campus-textbook-sharing)
