@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Avg
 from .models import Category, Textbook, TextbookVote, TextbookRating, TextbookComment, SharedResource, ResourceOrder
+from .cover_utils import ensure_textbook_cover
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -119,7 +120,16 @@ class TextbookCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['owner'] = self.context['request'].user
         validated_data['status'] = 'pending_review'
-        return super().create(validated_data)
+        textbook = super().create(validated_data)
+        if not textbook.cover_image:
+            ensure_textbook_cover(textbook)
+        return textbook
+
+    def update(self, instance, validated_data):
+        textbook = super().update(instance, validated_data)
+        if not textbook.cover_image:
+            ensure_textbook_cover(textbook)
+        return textbook
 
 
 class TextbookCommentSerializer(serializers.ModelSerializer):

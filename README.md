@@ -165,6 +165,7 @@ python manage.py adapt_legacy_orders
 
 补充说明：
 - `localize_real_textbooks` 与 `seed_real_cn_books` 都只使用真实网站返回的封面图片，不会生成虚假封面。
+- `repair_textbook_covers` 会为无封面教材自动补齐：优先匹配真实封面，无法匹配时自动生成可展示封面。
 - 公开站点存在限流（例如 418），建议分批多次执行并设置 `--sleep-ms`。
 
 ## 项目结构
